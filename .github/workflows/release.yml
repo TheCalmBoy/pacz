@@ -37,7 +37,8 @@ jobs:
       - name: Prepare package and checksum
         shell: bash
         run: |
-          package=$(find "$GITHUB_WORKSPACE" -maxdepth 1 -type f -name 'pacz-*.pkg.tar.zst' -print -quit)
+          # Arch makepkg also emits pacz-debug; select the installable package.
+          package=$(find "$GITHUB_WORKSPACE" -maxdepth 1 -type f -name 'pacz-[0-9]*-[0-9]*-x86_64.pkg.tar.zst' -print -quit)
           test -n "$package"
           mkdir -p "$GITHUB_WORKSPACE/dist"
           cp "$package" "$GITHUB_WORKSPACE/dist/"
