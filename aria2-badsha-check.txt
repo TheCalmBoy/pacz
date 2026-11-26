@@ -1,0 +1,23 @@
+
+11/26 10:44:05 [NOTICE] Downloading 1 item(s)
+
+11/26 10:44:05 [ERROR] Checksum error detected. file=dl-bad2/sed-4.10-2-x86_64.pkg.tar.zst
+
+11/26 10:44:05 [NOTICE] Download GID#8f74221648a12410 not complete: dl-bad2/sed-4.10-2-x86_64.pkg.tar.zst
+
+Download Results:
+gid   |stat|avg speed  |path/URI
+======+====+===========+=======================================================
+8f7422|ERR |    42MiB/s|dl-bad2/sed-4.10-2-x86_64.pkg.tar.zst
+
+Status Legend:
+(ERR):error occurred.
+
+aria2 will resume download if the transfer is restarted.
+If there are any errors, then see the log file. See '-l' option in help/man page for details.
+rc=32
+total 228
+drwxr-xr-x 2 root root   4096 Nov 26 10:44 .
+drwxrwxrwt 1 root root   4096 Nov 26 10:44 ..
+-rw-r--r-- 1 root root 220815 Nov 26 10:44 sed-4.10-2-x86_64.pkg.tar.zst
+-rw-r--r-- 1 root root     39 Nov 26 10:44 sed-4.10-2-x86_64.pkg.tar.zst.aria2

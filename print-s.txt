@@ -1,0 +1,5 @@
+go 2:1.27.4-1 44400479 go-2:1.27.4-1-x86_64.pkg.tar.zst extra https://fastly.mirror.pkgbuild.com/extra/os/x86_64/go-2:1.27.4-1-x86_64.pkg.tar.zst 80efa5d5375cdfc3ed5748fc1d9ba074190233c8250c08d58e206ca3869c60ed
+vim-runtime 9.2.1178-1 8049855 vim-runtime-9.2.1178-1-x86_64.pkg.tar.zst extra https://fastly.mirror.pkgbuild.com/extra/os/x86_64/vim-runtime-9.2.1178-1-x86_64.pkg.tar.zst 67fa4a8a1a8a06b64666ae65a97a21490bd74c4562786115829ac974e25554c3
+bash 5.3.20-1 2001850 bash-5.3.20-1-x86_64.pkg.tar.zst core https://fastly.mirror.pkgbuild.com/core/os/x86_64/bash-5.3.20-1-x86_64.pkg.tar.zst 73a67dc509ed4a6dd64e4c7eca2895643f48083940f49431782ce78c4d4619e1
+gpm 1.20.7.r38.ge82d1a6-7 142211 gpm-1.20.7.r38.ge82d1a6-7-x86_64.pkg.tar.zst core https://fastly.mirror.pkgbuild.com/core/os/x86_64/gpm-1.20.7.r38.ge82d1a6-7-x86_64.pkg.tar.zst c13146ba90f58ad4b561ffb15ae7d667718acca7865eb752b83d1530f3e67689
+vim 9.2.1178-1 2662435 vim-9.2.1178-1-x86_64.pkg.tar.zst extra https://fastly.mirror.pkgbuild.com/extra/os/x86_64/vim-9.2.1178-1-x86_64.pkg.tar.zst a85f55744bd392ce2e664e92a89d2a6d6e01039827b339aa956cfe344f73c181

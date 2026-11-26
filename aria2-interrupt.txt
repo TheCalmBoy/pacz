@@ -1,0 +1,44 @@
+
+11/26 10:44:05 [NOTICE] Downloading 1 item(s)
+ *** Download Progress Summary as of Thu Nov 26 10:44:06 2026 *** 
+===============================================================================
+[#78797d 16KiB/42MiB(0%) CN:1 DL:16KiB ETA:45m8s]
+FILE: dl-int/go-2:1.27.4-1-x86_64.pkg.tar.zst
+-------------------------------------------------------------------------------
+
+[#78797d 16KiB/42MiB(0%) CN:1 DL:16KiB ETA:45m8s]
+ *** Download Progress Summary as of Thu Nov 26 10:44:07 2026 *** 
+===============================================================================
+[#78797d 208KiB/42MiB(0%) CN:1 DL:103KiB ETA:6m55s]
+FILE: dl-int/go-2:1.27.4-1-x86_64.pkg.tar.zst
+-------------------------------------------------------------------------------
+
+[#78797d 208KiB/42MiB(0%) CN:1 DL:103KiB ETA:6m55s]
+ *** Download Progress Summary as of Thu Nov 26 10:44:09 2026 *** 
+===============================================================================
+[#78797d 416KiB/42MiB(0%) CN:1 DL:105KiB ETA:6m47s]
+FILE: dl-int/go-2:1.27.4-1-x86_64.pkg.tar.zst
+-------------------------------------------------------------------------------
+
+[#78797d 416KiB/42MiB(0%) CN:1 DL:105KiB ETA:6m47s]
+
+11/26 10:44:09 [NOTICE] Shutdown sequence commencing... Press Ctrl-C again for emergency shutdown.
+
+11/26 10:44:09 [NOTICE] Download GID#78797d5ef7f7b115 not complete: dl-int/go-2:1.27.4-1-x86_64.pkg.tar.zst
+
+Download Results:
+gid   |stat|avg speed  |path/URI
+======+====+===========+=======================================================
+78797d|INPR|   109KiB/s|dl-int/go-2:1.27.4-1-x86_64.pkg.tar.zst
+
+Status Legend:
+(INPR):download in-progress.
+
+aria2 will resume download if the transfer is restarted.
+If there are any errors, then see the log file. See '-l' option in help/man page for details.
+rc=124
+total 444
+drwxr-xr-x 2 root root   4096 Nov 26 10:44 .
+drwxrwxrwt 1 root root   4096 Nov 26 10:44 ..
+-rw-r--r-- 1 root root 442368 Nov 26 10:44 go-2:1.27.4-1-x86_64.pkg.tar.zst
+-rw-r--r-- 1 root root     64 Nov 26 10:44 go-2:1.27.4-1-x86_64.pkg.tar.zst.aria2

@@ -1,0 +1,3 @@
+aria2 version 1.37.0
+ .--.                  Pacman v7.1.0 - libalpm v16.0.1
+/ _.-' .-.  .-.  .-.   Copyright (C) 2006-2025 Pacman Development Team

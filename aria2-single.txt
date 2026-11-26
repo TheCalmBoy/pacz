@@ -1,0 +1,14 @@
+
+11/26 10:44:04 [NOTICE] Downloading 1 item(s)
+
+11/26 10:44:05 [NOTICE] Verification finished successfully. file=dl-single/go-2:1.27.4-1-x86_64.pkg.tar.zst
+
+11/26 10:44:05 [NOTICE] Download complete: dl-single/go-2:1.27.4-1-x86_64.pkg.tar.zst
+
+Download Results:
+gid   |stat|avg speed  |path/URI
+======+====+===========+=======================================================
+15da17|OK  |   336MiB/s|dl-single/go-2:1.27.4-1-x86_64.pkg.tar.zst
+
+Status Legend:
+(OK):download completed.
