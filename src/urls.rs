@@ -44,10 +44,19 @@ mod tests {
     use crate::rows::test_pkg;
 
     fn pkg(url: &str, repo: &str) -> Pkg {
-        Pkg { url: url.into(), repo: repo.into(), file: "p.pkg".into(), sha256: None, ..test_pkg("p", 1) }
+        Pkg {
+            url: url.into(),
+            repo: repo.into(),
+            file: "p.pkg".into(),
+            sha256: None,
+            ..test_pkg("p", 1)
+        }
     }
     fn repo() -> Vec<Repo> {
-        vec![Repo { name: "core".into(), servers: vec!["https://a".into(), "https://b".into()] }]
+        vec![Repo {
+            name: "core".into(),
+            servers: vec!["https://a".into(), "https://b".into()],
+        }]
     }
     #[test]
     fn cached() {
@@ -56,11 +65,20 @@ mod tests {
     #[test]
     fn own_url_first_and_deduped() {
         let s = resolve(&repo(), &pkg("https://b/p.pkg", "core"));
-        assert_eq!(s, Source::Urls(vec!["https://b/p.pkg".into(), "https://a/p.pkg".into()]));
+        assert_eq!(
+            s,
+            Source::Urls(vec!["https://b/p.pkg".into(), "https://a/p.pkg".into()])
+        );
     }
     #[test]
     fn unknown_repo_falls_back_to_own_url() {
-        assert_eq!(resolve(&repo(), &pkg("https://z/p.pkg", "custom")), Source::Urls(vec!["https://z/p.pkg".into()]));
-        assert_eq!(resolve(&repo(), &pkg("ftp://z/p.pkg", "custom")), Source::None);
+        assert_eq!(
+            resolve(&repo(), &pkg("https://z/p.pkg", "custom")),
+            Source::Urls(vec!["https://z/p.pkg".into()])
+        );
+        assert_eq!(
+            resolve(&repo(), &pkg("ftp://z/p.pkg", "custom")),
+            Source::None
+        );
     }
 }

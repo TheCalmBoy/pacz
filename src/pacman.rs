@@ -6,7 +6,11 @@ use crate::rows::PRINT_FORMAT;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Op {
     /// `-S`, `-Sy`, `-Su`, `-Syu`, `-Sw`, ... (also as `-S -y -u` or long options).
-    Sync { refresh: u8, upgrade: bool, download_only: bool },
+    Sync {
+        refresh: u8,
+        upgrade: bool,
+        download_only: bool,
+    },
     /// `-R...`: needs root, handed to pacman unchanged.
     Remove,
     /// Anything else (`-Q`, `-Ss`, `-Si`, `-Sc`, `-U`, `-F`, `-S --help`, ...):
@@ -51,7 +55,15 @@ pub const VALUE_FLAGS: &[&str] = &[
 const SHORT_VALUE: &[char] = &['b', 'r'];
 /// Sync letters that make `-S` something pacman should do itself (search, info, ...).
 const SYNC_PASS: &[char] = &['s', 'i', 'l', 'g', 'c', 'p'];
-const SYNC_PASS_LONG: &[&str] = &["--search", "--info", "--list", "--groups", "--clean", "--print", "--print-format"];
+const SYNC_PASS_LONG: &[&str] = &[
+    "--search",
+    "--info",
+    "--list",
+    "--groups",
+    "--clean",
+    "--print",
+    "--print-format",
+];
 
 fn long_op(a: &str) -> Option<char> {
     Some(match a {
@@ -78,7 +90,10 @@ fn set_op(slot: &mut Option<char>, c: char) -> Result<(), String> {
 }
 
 fn split_list(v: &str) -> impl Iterator<Item = String> + '_ {
-    v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(String::from)
+    v.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
 }
 
 pub fn parse_cli<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
@@ -86,7 +101,15 @@ pub fn parse_cli<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String>
     if args.is_empty() {
         return Err("no operation given (try pacz --help)".into());
     }
-    let mut cli = Cli { op: Op::Help, targets: vec![], ignore: vec![], noconfirm: false, dry_run: false, passthrough: vec![], raw: vec![] };
+    let mut cli = Cli {
+        op: Op::Help,
+        targets: vec![],
+        ignore: vec![],
+        noconfirm: false,
+        dry_run: false,
+        passthrough: vec![],
+        raw: vec![],
+    };
     let (mut op, mut help) = (None::<char>, false);
     let (mut refresh, mut upgrade, mut download_only, mut pass) = (0u8, false, false, false);
     let mut i = 0;
@@ -129,7 +152,10 @@ pub fn parse_cli<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String>
                 pass = true;
             }
             if VALUE_FLAGS.contains(&a.as_str()) {
-                let v = args.get(i).ok_or_else(|| format!("{a} needs a value"))?.clone();
+                let v = args
+                    .get(i)
+                    .ok_or_else(|| format!("{a} needs a value"))?
+                    .clone();
                 i += 1;
                 cli.raw.push(v.clone());
                 cli.passthrough.extend([a, v]);
@@ -153,7 +179,10 @@ pub fn parse_cli<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String>
                         let rest: String = chars[j..].iter().collect();
                         j = chars.len();
                         let v = if rest.is_empty() {
-                            let v = args.get(i).ok_or_else(|| format!("-{c} needs a value"))?.clone();
+                            let v = args
+                                .get(i)
+                                .ok_or_else(|| format!("-{c} needs a value"))?
+                                .clone();
                             i += 1;
                             cli.raw.push(v.clone());
                             v
@@ -183,7 +212,11 @@ pub fn parse_cli<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String>
         Some('V') => Op::Version,
         Some(_) if help => Op::Pacman,
         Some('S') if pass => Op::Pacman,
-        Some('S') => Op::Sync { refresh, upgrade, download_only },
+        Some('S') => Op::Sync {
+            refresh,
+            upgrade,
+            download_only,
+        },
         Some('R') => Op::Remove,
         Some(_) => Op::Pacman,
     };
@@ -211,7 +244,10 @@ pub fn without_flags(args: &[String], names: &[&str]) -> Vec<String> {
     while let Some(a) = it.next() {
         if names.contains(&a.as_str()) {
             it.next();
-        } else if !names.iter().any(|n| a.strip_prefix(*n).is_some_and(|r| r.starts_with('='))) {
+        } else if !names
+            .iter()
+            .any(|n| a.strip_prefix(*n).is_some_and(|r| r.starts_with('=')))
+        {
             out.push(a.clone());
         }
     }
@@ -228,7 +264,10 @@ pub fn only_flags(args: &[String], names: &[&str]) -> Vec<String> {
             if let Some(v) = it.next() {
                 out.push(v.clone());
             }
-        } else if names.iter().any(|n| a.strip_prefix(*n).is_some_and(|r| r.starts_with('='))) {
+        } else if names
+            .iter()
+            .any(|n| a.strip_prefix(*n).is_some_and(|r| r.starts_with('=')))
+        {
             out.push(a.clone());
         }
     }
@@ -236,7 +275,9 @@ pub fn only_flags(args: &[String], names: &[&str]) -> Vec<String> {
 }
 
 fn build(cli: &Cli, passthrough: Vec<String>, extra: &[&str]) -> Result<Vec<String>, String> {
-    let Op::Sync { upgrade, .. } = cli.op else { return Err("not a sync operation".into()) };
+    let Op::Sync { upgrade, .. } = cli.op else {
+        return Err("not a sync operation".into());
+    };
     let mut a = vec![if upgrade { "-Su" } else { "-S" }.to_string()];
     if !cli.ignore.is_empty() {
         a.push(format!("--ignore={}", cli.ignore.join(",")));
@@ -252,7 +293,17 @@ fn build(cli: &Cli, passthrough: Vec<String>, extra: &[&str]) -> Result<Vec<Stri
 
 /// `pacman` argv for the size/URL query (no refresh: that is a separate step).
 pub fn query_args(cli: &Cli) -> Result<Vec<String>, String> {
-    build(cli, without_flags(&cli.passthrough, &["--color"]), &["--color", "never", "--print", "--print-format", PRINT_FORMAT])
+    build(
+        cli,
+        without_flags(&cli.passthrough, &["--color"]),
+        &[
+            "--color",
+            "never",
+            "--print",
+            "--print-format",
+            PRINT_FORMAT,
+        ],
+    )
 }
 
 /// `pacman` argv for the real install, run after all downloads succeeded. Color is left
@@ -273,7 +324,9 @@ pub fn download_only_args(cli: &Cli) -> Result<Vec<String>, String> {
 
 /// `pacman -Sy[y]` argv using the XferCommand-free copy of pacman.conf at `conf`.
 pub fn refresh_args(cli: &Cli, conf: &str) -> Result<Vec<String>, String> {
-    let Op::Sync { refresh, .. } = cli.op else { return Err("not a sync operation".into()) };
+    let Op::Sync { refresh, .. } = cli.op else {
+        return Err("not a sync operation".into());
+    };
     let mut a = vec![format!("-S{}", "y".repeat(refresh.clamp(1, 2) as usize))];
     a.extend(without_flags(&cli.passthrough, &["--config"]));
     a.extend(["--config".to_string(), conf.to_string()]);
@@ -286,7 +339,10 @@ pub fn refresh_args(cli: &Cli, conf: &str) -> Result<Vec<String>, String> {
 /// `pacman -Q` argv for the installed versions of `names` (for the selector).
 pub fn installed_query_args(cli: &Cli, names: &[String]) -> Vec<String> {
     let mut a = vec!["-Q".to_string(), "--color".into(), "never".into()];
-    a.extend(only_flags(&cli.passthrough, &["--config", "--dbpath", "--root", "-b", "-r"]));
+    a.extend(only_flags(
+        &cli.passthrough,
+        &["--config", "--dbpath", "--root", "-b", "-r"],
+    ));
     a.push("--".into());
     a.extend(names.iter().cloned());
     a
@@ -299,7 +355,11 @@ mod tests {
         parse_cli(a.iter().map(|s| s.to_string())).unwrap()
     }
     fn sync(refresh: u8, upgrade: bool) -> Op {
-        Op::Sync { refresh, upgrade, download_only: false }
+        Op::Sync {
+            refresh,
+            upgrade,
+            download_only: false,
+        }
     }
 
     #[test]
@@ -308,12 +368,30 @@ mod tests {
         assert_eq!(cli(&["-Syyu"]).op, sync(2, true));
         assert_eq!(cli(&["-Suy"]).op, sync(1, true));
         assert_eq!(cli(&["-S", "-y", "-u"]).op, sync(1, true));
-        assert_eq!(cli(&["--sync", "--refresh", "--sysupgrade"]).op, sync(1, true));
+        assert_eq!(
+            cli(&["--sync", "--refresh", "--sysupgrade"]).op,
+            sync(1, true)
+        );
         assert_eq!(cli(&["-S", "a"]).op, sync(0, false));
-        assert_eq!(cli(&["-Sw", "a"]).op, Op::Sync { refresh: 0, upgrade: false, download_only: true });
+        assert_eq!(
+            cli(&["-Sw", "a"]).op,
+            Op::Sync {
+                refresh: 0,
+                upgrade: false,
+                download_only: true
+            }
+        );
         assert_eq!(cli(&["-Rcs", "a"]).op, Op::Remove);
         assert_eq!(cli(&["-Rdd", "a"]).op, Op::Remove);
-        let pass: [&[&str]; 7] = [&["-Q"], &["-Ss", "foo"], &["-Si", "foo"], &["-Sc"], &["-S", "--print", "x"], &["-Sh"], &["-U", "x.pkg"]];
+        let pass: [&[&str]; 7] = [
+            &["-Q"],
+            &["-Ss", "foo"],
+            &["-Si", "foo"],
+            &["-Sc"],
+            &["-S", "--print", "x"],
+            &["-Sh"],
+            &["-U", "x.pkg"],
+        ];
         for p in pass {
             assert_eq!(cli(p).op, Op::Pacman, "{p:?}");
         }
@@ -333,7 +411,19 @@ mod tests {
 
     #[test]
     fn flags_reach_both_query_and_install() {
-        let c = cli(&["-S", "foo", "bar", "--needed", "--overwrite", "/usr/lib/x/*", "--ignore", "a,b", "--ignore=c", "--noconfirm", "-dd"]);
+        let c = cli(&[
+            "-S",
+            "foo",
+            "bar",
+            "--needed",
+            "--overwrite",
+            "/usr/lib/x/*",
+            "--ignore",
+            "a,b",
+            "--ignore=c",
+            "--noconfirm",
+            "-dd",
+        ]);
         assert_eq!(c.targets, ["foo", "bar"]);
         assert_eq!(c.ignore, ["a", "b", "c"]);
         let q = query_args(&c).unwrap();
@@ -341,14 +431,25 @@ mod tests {
         for args in [&q, &i] {
             assert!(args.contains(&"--needed".to_string()));
             assert!(args.contains(&"-dd".to_string()));
-            assert!(args.windows(2).any(|w| w == ["--overwrite", "/usr/lib/x/*"]), "{args:?}");
+            assert!(
+                args.windows(2)
+                    .any(|w| w == ["--overwrite", "/usr/lib/x/*"]),
+                "{args:?}"
+            );
             assert!(args.contains(&"--ignore=a,b,c".to_string()));
             let dd = args.iter().position(|a| a == "--").unwrap();
-            assert_eq!(&args[dd + 1..], ["foo", "bar"], "targets come last, after --");
+            assert_eq!(
+                &args[dd + 1..],
+                ["foo", "bar"],
+                "targets come last, after --"
+            );
         }
         assert!(q.contains(&"--print".to_string()) && q.contains(&PRINT_FORMAT.to_string()));
         assert!(i.contains(&"--noconfirm".to_string()) && !i.contains(&"--print".to_string()));
-        assert!(!i.contains(&"--color".to_string()), "pacman decides colors for the install");
+        assert!(
+            !i.contains(&"--color".to_string()),
+            "pacman decides colors for the install"
+        );
     }
 
     #[test]
@@ -362,12 +463,22 @@ mod tests {
 
     #[test]
     fn refresh_replaces_config_and_counts_y() {
-        let c = cli(&["-Syyu", "--config", "/etc/pacman.conf", "--noconfirm", "--dbpath", "/db"]);
+        let c = cli(&[
+            "-Syyu",
+            "--config",
+            "/etc/pacman.conf",
+            "--noconfirm",
+            "--dbpath",
+            "/db",
+        ]);
         let r = refresh_args(&c, "/tmp/x.conf").unwrap();
         assert_eq!(r[0], "-Syy");
         assert!(r.windows(2).any(|w| w == ["--config", "/tmp/x.conf"]));
         assert!(!r.contains(&"/etc/pacman.conf".to_string()));
-        assert!(r.windows(2).any(|w| w == ["--dbpath", "/db"]) && r.contains(&"--noconfirm".to_string()));
+        assert!(
+            r.windows(2).any(|w| w == ["--dbpath", "/db"])
+                && r.contains(&"--noconfirm".to_string())
+        );
     }
 
     #[test]
@@ -384,11 +495,17 @@ mod tests {
     #[test]
     fn value_flags_short_long_and_equals() {
         let c = cli(&["-S", "-b", "/db1", "-r/root", "--cachedir=/c", "x"]);
-        assert_eq!(c.passthrough, ["-b", "/db1", "-r", "/root", "--cachedir=/c"]);
+        assert_eq!(
+            c.passthrough,
+            ["-b", "/db1", "-r", "/root", "--cachedir=/c"]
+        );
         assert_eq!(flag_value(&c.passthrough, "--cachedir"), Some("/c"));
         assert_eq!(flag_value(&c.passthrough, "--config"), None);
         let q = installed_query_args(&c, &["x".into()]);
-        assert_eq!(q, ["-Q", "--color", "never", "-b", "/db1", "-r", "/root", "--", "x"]);
+        assert_eq!(
+            q,
+            ["-Q", "--color", "never", "-b", "/db1", "-r", "/root", "--", "x"]
+        );
         assert!(parse_cli(["-S".to_string(), "--config".to_string()]).is_err());
     }
 

@@ -2,11 +2,23 @@
 //!
 //! `pacz plan --rows FILE --conf FILE [--arch A]` is kept as a dry-run debugging aid
 //! (no network, no root): it plans downloads from saved `pacman --print` output.
-use pacz::{app, conf::parse_conf, config::Config, pacman::parse_cli, plan::{plan, PlanCfg}, rows::parse_rows};
+use pacz::{
+    app,
+    conf::parse_conf,
+    config::Config,
+    pacman::parse_cli,
+    plan::{plan, PlanCfg},
+    rows::parse_rows,
+};
 use std::{env, fs, process::ExitCode};
 
 fn plan_cmd(args: &[String]) -> ExitCode {
-    let get = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1)).cloned();
+    let get = |flag: &str| {
+        args.iter()
+            .position(|a| a == flag)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+    };
     let (Some(rows), Some(conf)) = (get("--rows"), get("--conf")) else {
         eprintln!("usage: pacz plan --rows FILE --conf FILE [--arch ARCH]");
         return ExitCode::from(2);

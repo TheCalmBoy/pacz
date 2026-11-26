@@ -26,13 +26,21 @@ Download the latest package and `SHA256SUMS` from the [GitHub Releases page](htt
 sha256sum -c SHA256SUMS
 ```
 
-Install the runtime dependency `aria2-next-bin` first if it is not already installed. Then install the downloaded package with pacman. The first release package is named `pacz-0.3.0-2-x86_64.pkg.tar.zst`:
+Install the runtime dependency `aria2-next-bin` first if it is not already installed. Then install the downloaded package with pacman. The current release package is named `pacz-0.3.1-1-x86_64.pkg.tar.zst`:
 
 ```sh
-sudo pacman -U ./pacz-0.3.0-2-x86_64.pkg.tar.zst
+sudo pacman -U ./pacz-0.3.1-1-x86_64.pkg.tar.zst
 ```
 
-This also updates an older package such as `0.3.0-1`. For later releases, download the new package from the Releases page and run the same `pacman -U` command with its filename.
+This updates an older pacz package in place. For future releases, download the new package from the Releases page and run the same `pacman -U` command with its filename.
+
+## Update selector and download display
+
+In an interactive terminal, update lists use a keyboard menu: arrows or `j`/`k` move,
+Space toggles a package, `/` searches, `s`/`n` changes the sort order, and `c` clears
+ignored packages. Enter continues and `q` cancels. The download dashboard shows each
+package's progress, speed, and completion status during batched downloads. When input
+isn't a terminal, pacz keeps the line based selector with numbers and ranges.
 
 ## Build and check
 

@@ -25,7 +25,9 @@ pub fn human(bytes: u64) -> String {
 pub fn parse_size(s: &str) -> Option<u64> {
     let s = s.trim();
     let s = s.strip_suffix("/s").unwrap_or(s).trim();
-    let split = s.find(|c: char| !(c.is_ascii_digit() || c == '.')).unwrap_or(s.len());
+    let split = s
+        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .unwrap_or(s.len());
     let (num, unit) = s.split_at(split);
     if num.is_empty() {
         return None;

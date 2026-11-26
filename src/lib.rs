@@ -1,5 +1,6 @@
 //! pacz library. Pure logic lives in the modules with unit tests; process and terminal
-//! I/O is confined to `driver` (aria2), `app` (pacman/paru, prompts) and `sys` (libc).
+//! I/O lives in `driver` (aria2), `app` (pacman/paru and prompts), `select_ui` (terminal
+//! menu), and `sys` (libc).
 pub mod app;
 pub mod aria2;
 pub mod aur;
@@ -13,5 +14,6 @@ pub mod render;
 pub mod rows;
 pub mod sched;
 pub mod select;
+pub mod select_ui;
 pub mod sys;
 pub mod urls;

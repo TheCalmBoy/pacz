@@ -1,7 +1,7 @@
 # Build this local tree with: BUILDDIR=/tmp/pacz-makepkg makepkg -si
 pkgname=pacz
-pkgver=0.3.0
-pkgrel=2
+pkgver=0.3.1
+pkgrel=1
 pkgdesc='pacman wrapper with batched, mirror-aware parallel downloads via aria2-next'
 arch=('x86_64' 'aarch64')
 url='https://github.com/TheCalmBoy/pacz'

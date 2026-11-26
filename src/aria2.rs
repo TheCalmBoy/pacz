@@ -17,11 +17,25 @@ pub struct Prog {
     pub eta: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileProgress {
+    pub done: u64,
+    pub total: u64,
+    pub speed: u64,
+    pub conns: u32,
+    pub eta: Option<u64>,
+    pub active: bool,
+    pub completed: bool,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Event {
     /// `[#gid 1.0MiB/10MiB(10%) CN:1 DL:1.0MiB ETA:9s]` or the compact multi-download
     /// readout `[DL:2MiB][#a 1MiB/2MiB(50%)][#b ...]`; `speed` is the global `DL:` value.
-    Progress { items: Vec<Prog>, speed: Option<u64> },
+    Progress {
+        items: Vec<Prog>,
+        speed: Option<u64>,
+    },
     /// `FILE: /path` under a summary entry (names the gid just above it).
     File(String),
     /// `[NOTICE] Download complete: /path/file`
@@ -69,7 +83,10 @@ fn parse_eta(s: &str) -> Option<u64> {
 fn parse_group(g: &str) -> Option<Prog> {
     let mut toks = g.split_whitespace();
     let gid = toks.next()?.strip_prefix('#')?.to_owned();
-    let mut p = Prog { gid, ..Default::default() };
+    let mut p = Prog {
+        gid,
+        ..Default::default()
+    };
     for tok in toks {
         if let Some(v) = tok.strip_prefix("CN:") {
             p.conns = v.parse().ok();
@@ -101,7 +118,10 @@ fn parse_result_row(line: &str) -> Option<Event> {
         "RM" => ResultStatus::Removed,
         _ => return None,
     };
-    Some(Event::Result { status, path: f[3].trim().to_owned() })
+    Some(Event::Result {
+        status,
+        path: f[3].trim().to_owned(),
+    })
 }
 
 pub fn parse_line(raw: &str) -> Option<Event> {
@@ -114,7 +134,9 @@ pub fn parse_line(raw: &str) -> Option<Event> {
         return Some(Event::BlockStart);
     }
     if let Some(i) = line.find("Download complete: ") {
-        return Some(Event::Complete(line[i + "Download complete: ".len()..].trim().to_owned()));
+        return Some(Event::Complete(
+            line[i + "Download complete: ".len()..].trim().to_owned(),
+        ));
     }
     if let Some(path) = line.strip_prefix("FILE: ") {
         return Some(Event::File(path.trim().to_owned()));
@@ -168,7 +190,10 @@ pub struct BatchProgress {
 impl BatchProgress {
     /// `members`: (file name, size in bytes) for every file in the batch.
     pub fn new(members: impl IntoIterator<Item = (String, u64)>) -> Self {
-        Self { sizes: members.into_iter().collect(), ..Default::default() }
+        Self {
+            sizes: members.into_iter().collect(),
+            ..Default::default()
+        }
     }
 
     pub fn feed(&mut self, line: &str) {
@@ -184,7 +209,11 @@ impl BatchProgress {
                     self.global_speed = speed;
                 }
                 for p in items {
-                    if self.gid_file.get(&p.gid).is_some_and(|f| self.completed.contains(f)) {
+                    if self
+                        .gid_file
+                        .get(&p.gid)
+                        .is_some_and(|f| self.completed.contains(f))
+                    {
                         continue; // late readout of a file that already finished
                     }
                     self.last_gid = Some(p.gid.clone());
@@ -239,7 +268,8 @@ impl BatchProgress {
     }
 
     pub fn speed(&self) -> u64 {
-        self.global_speed.unwrap_or_else(|| self.live.values().filter_map(|p| p.speed).sum())
+        self.global_speed
+            .unwrap_or_else(|| self.live.values().filter_map(|p| p.speed).sum())
     }
 
     /// Open connections (falls back to 1 per running download when aria2 did not say).
@@ -271,9 +301,56 @@ impl BatchProgress {
         self.completed.len()
     }
 
+    /// Progress for one package in a multi-file aria2 task, if aria2 has identified it.
+    pub fn file_progress(&self, file: &str) -> Option<FileProgress> {
+        let total = *self.sizes.get(file)?;
+        let completed =
+            self.completed.contains(file) || self.result_status(file) == Some(ResultStatus::Ok);
+        if completed {
+            return Some(FileProgress {
+                done: total,
+                total,
+                speed: 0,
+                conns: 0,
+                eta: Some(0),
+                active: false,
+                completed: true,
+            });
+        }
+
+        let mut active = false;
+        let mut done = 0u64;
+        let mut speed = 0u64;
+        let mut conns = 0u32;
+        for (gid, progress) in &self.live {
+            if self.gid_file.get(gid).map(String::as_str) != Some(file) {
+                continue;
+            }
+            active = true;
+            done = done.saturating_add(progress.done);
+            speed = speed.saturating_add(progress.speed.unwrap_or(0));
+            conns = conns.saturating_add(progress.conns.unwrap_or(1));
+        }
+        if !active {
+            return None;
+        }
+        let done = done.min(total);
+        let eta = (speed > 0).then(|| total.saturating_sub(done).div_ceil(speed));
+        Some(FileProgress {
+            done,
+            total,
+            speed,
+            conns,
+            eta,
+            active,
+            completed: false,
+        })
+    }
+
     /// What the final results table said about this file, if it was printed.
     pub fn result(&self, file: &str) -> Option<bool> {
-        self.result_status(file).map(|status| status == ResultStatus::Ok)
+        self.result_status(file)
+            .map(|status| status == ResultStatus::Ok)
     }
 
     pub fn result_status(&self, file: &str) -> Option<ResultStatus> {
@@ -288,20 +365,38 @@ mod tests {
     #[test]
     fn progress_line() {
         let e = parse_line("[#a1b2c3 1.0MiB/10MiB(10%) CN:8 DL:1.5MiB ETA:1m9s]").unwrap();
-        let p = Prog { gid: "a1b2c3".into(), done: 1 << 20, total: 10 << 20, conns: Some(8), speed: Some(1_572_864), eta: Some(69) };
-        assert_eq!(e, Event::Progress { items: vec![p], speed: None });
+        let p = Prog {
+            gid: "a1b2c3".into(),
+            done: 1 << 20,
+            total: 10 << 20,
+            conns: Some(8),
+            speed: Some(1_572_864),
+            eta: Some(69),
+        };
+        assert_eq!(
+            e,
+            Event::Progress {
+                items: vec![p],
+                speed: None
+            }
+        );
     }
 
     #[test]
     fn progress_without_eta_and_compact_readout() {
         match parse_line("[#a 0B/0B(0%) CN:1 DL:0B]").unwrap() {
-            Event::Progress { items, .. } => assert_eq!((items[0].eta, items[0].speed), (None, Some(0))),
+            Event::Progress { items, .. } => {
+                assert_eq!((items[0].eta, items[0].speed), (None, Some(0)))
+            }
             e => panic!("{e:?}"),
         }
         match parse_line("[DL:2.0MiB][#a 1.0MiB/2.0MiB(50%)][#b 0B/1.0MiB(0%)](+3)").unwrap() {
             Event::Progress { items, speed } => {
                 assert_eq!(speed, Some(2 << 20));
-                assert_eq!(items.iter().map(|p| p.gid.as_str()).collect::<Vec<_>>(), ["a", "b"]);
+                assert_eq!(
+                    items.iter().map(|p| p.gid.as_str()).collect::<Vec<_>>(),
+                    ["a", "b"]
+                );
                 assert_eq!(items[0].done, 1 << 20);
             }
             e => panic!("{e:?}"),
@@ -311,23 +406,50 @@ mod tests {
     #[test]
     fn notice_header_file_results_errors_and_noise() {
         assert_eq!(
-            parse_line("11/25 00:00:01 [NOTICE] Download complete: /var/cache/pacman/pkg/a.pkg.tar.zst"),
-            Some(Event::Complete("/var/cache/pacman/pkg/a.pkg.tar.zst".into()))
+            parse_line(
+                "11/25 00:00:01 [NOTICE] Download complete: /var/cache/pacman/pkg/a.pkg.tar.zst"
+            ),
+            Some(Event::Complete(
+                "/var/cache/pacman/pkg/a.pkg.tar.zst".into()
+            ))
         );
-        assert_eq!(parse_line("*** Download Progress Summary as of Wed Nov 25 ***"), Some(Event::BlockStart));
-        assert_eq!(parse_line("FILE: /x/a.pkg"), Some(Event::File("/x/a.pkg".into())));
-        assert_eq!(parse_line("2089b0|OK  |   1.2MiB/s|/c/a.pkg"), Some(Event::Result { status: ResultStatus::Ok, path: "/c/a.pkg".into() }));
-        assert_eq!(parse_line("2089b0|ERR |       0B/s|https://m/b.pkg"), Some(Event::Result { status: ResultStatus::Error, path: "https://m/b.pkg".into() }));
+        assert_eq!(
+            parse_line("*** Download Progress Summary as of Wed Nov 25 ***"),
+            Some(Event::BlockStart)
+        );
+        assert_eq!(
+            parse_line("FILE: /x/a.pkg"),
+            Some(Event::File("/x/a.pkg".into()))
+        );
+        assert_eq!(
+            parse_line("2089b0|OK  |   1.2MiB/s|/c/a.pkg"),
+            Some(Event::Result {
+                status: ResultStatus::Ok,
+                path: "/c/a.pkg".into()
+            })
+        );
+        assert_eq!(
+            parse_line("2089b0|ERR |       0B/s|https://m/b.pkg"),
+            Some(Event::Result {
+                status: ResultStatus::Error,
+                path: "https://m/b.pkg".into()
+            })
+        );
         assert_eq!(parse_line("gid   |stat|avg speed  |path/URI"), None);
         assert_eq!(
             parse_line("07/22 12:00:00 [ERROR] CUID#7 - Download aborted. URI=https://m/a"),
-            Some(Event::Error("CUID#7 - Download aborted. URI=https://m/a".into()))
+            Some(Event::Error(
+                "CUID#7 - Download aborted. URI=https://m/a".into()
+            ))
         );
         assert_eq!(
             parse_line("  -> [HttpSkipResponseCommand.cc:218] errorCode=3 Resource not found"),
             Some(Event::Error("errorCode=3 Resource not found".into()))
         );
-        assert_eq!(parse_line("\x1b[1;32m*** Download Progress Summary as of x ***\x1b[0m"), Some(Event::BlockStart));
+        assert_eq!(
+            parse_line("\x1b[1;32m*** Download Progress Summary as of x ***\x1b[0m"),
+            Some(Event::BlockStart)
+        );
         assert_eq!(parse_line("======+====+===========+===="), None);
         assert_eq!(parse_line(""), None);
     }
@@ -394,7 +516,10 @@ mod tests {
                 p.feed(line);
             }
             assert_eq!(p.result(file), Some(false));
-            assert!(p.last_error.as_deref().is_some_and(|e| e.contains("Checksum error")));
+            assert!(p
+                .last_error
+                .as_deref()
+                .is_some_and(|e| e.contains("Checksum error")));
         }
 
         let go = "go-2:1.27.4-1-x86_64.pkg.tar.zst";
@@ -403,7 +528,10 @@ mod tests {
             interrupted.feed(line);
         }
         assert_eq!(interrupted.result(go), Some(false));
-        assert_eq!(interrupted.result_status(go), Some(ResultStatus::InProgress));
+        assert_eq!(
+            interrupted.result_status(go),
+            Some(ResultStatus::InProgress)
+        );
         assert!(!interrupted.is_completed(go));
     }
 
@@ -421,7 +549,10 @@ mod tests {
         ] {
             b.feed(l);
         }
-        assert_eq!((b.speed(), b.active(), b.conns(), b.done()), (4096, 2, 3, 50));
+        assert_eq!(
+            (b.speed(), b.active(), b.conns(), b.done()),
+            (4096, 2, 3, 50)
+        );
         b.feed("x [NOTICE] Download complete: /c/a.pkg");
         b.feed("x [NOTICE] Download complete: /c/a.pkg");
         b.feed("x [NOTICE] Download complete: /c/unknown.pkg");
@@ -445,7 +576,10 @@ mod tests {
         ] {
             b.feed(l);
         }
-        assert_eq!((b.done(), b.percent(), b.conns(), b.eta()), (30, 30, 8, Some(1)));
+        assert_eq!(
+            (b.done(), b.percent(), b.conns(), b.eta()),
+            (30, 30, 8, Some(1))
+        );
         b.feed("[ERROR] CUID#7 - boom");
         assert_eq!(b.last_error.as_deref(), Some("CUID#7 - boom"));
     }

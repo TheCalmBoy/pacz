@@ -27,7 +27,13 @@ pub fn isatty(fd: i32) -> bool {
 pub fn term_size() -> Option<(usize, usize)> {
     // SAFETY: winsize is plain data; TIOCGWINSZ fills it in.
     let mut ws: libc::winsize = unsafe { std::mem::zeroed() };
-    let r = unsafe { libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut ws as *mut libc::winsize) };
+    let r = unsafe {
+        libc::ioctl(
+            libc::STDOUT_FILENO,
+            libc::TIOCGWINSZ,
+            &mut ws as *mut libc::winsize,
+        )
+    };
     (r == 0 && ws.ws_col > 0).then_some((ws.ws_col as usize, ws.ws_row.max(1) as usize))
 }
 
@@ -79,11 +85,23 @@ pub fn lookup_user(name: &str) -> Result<User, String> {
     let mut pwd: libc::passwd = unsafe { std::mem::zeroed() };
     let mut buf: Vec<libc::c_char> = vec![0; 1 << 16];
     let mut res: *mut libc::passwd = std::ptr::null_mut();
-    let rc = unsafe { libc::getpwnam_r(cname.as_ptr(), &mut pwd, buf.as_mut_ptr(), buf.len(), &mut res) };
+    let rc = unsafe {
+        libc::getpwnam_r(
+            cname.as_ptr(),
+            &mut pwd,
+            buf.as_mut_ptr(),
+            buf.len(),
+            &mut res,
+        )
+    };
     if rc != 0 || res.is_null() || pwd.pw_dir.is_null() {
         return Err(format!("unknown user {name}"));
     }
-    let home = PathBuf::from(unsafe { CStr::from_ptr(pwd.pw_dir) }.to_string_lossy().into_owned());
+    let home = PathBuf::from(
+        unsafe { CStr::from_ptr(pwd.pw_dir) }
+            .to_string_lossy()
+            .into_owned(),
+    );
     let (uid, gid) = (pwd.pw_uid, pwd.pw_gid);
     let mut n: libc::c_int = 32;
     loop {
@@ -93,7 +111,13 @@ pub fn lookup_user(name: &str) -> Result<User, String> {
         let r = unsafe { libc::getgrouplist(cname.as_ptr(), gid, groups.as_mut_ptr(), &mut count) };
         if r >= 0 {
             groups.truncate(count.max(0) as usize);
-            return Ok(User { name: name.to_owned(), uid, gid, home, groups });
+            return Ok(User {
+                name: name.to_owned(),
+                uid,
+                gid,
+                home,
+                groups,
+            });
         }
         if n >= 1 << 16 {
             return Err(format!("cannot list the groups of {name}"));
@@ -109,7 +133,10 @@ pub fn run_as(cmd: &mut Command, u: &User) {
     // SAFETY: the hook only makes async-signal-safe syscalls and does not allocate.
     unsafe {
         cmd.pre_exec(move || {
-            if libc::setgroups(groups.len(), groups.as_ptr()) != 0 || libc::setgid(gid) != 0 || libc::setuid(uid) != 0 {
+            if libc::setgroups(groups.len(), groups.as_ptr()) != 0
+                || libc::setgid(gid) != 0
+                || libc::setuid(uid) != 0
+            {
                 return Err(io::Error::last_os_error());
             }
             if uid != 0 && libc::setuid(0) == 0 {

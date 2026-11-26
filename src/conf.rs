@@ -24,7 +24,10 @@ fn key_value(line: &str) -> Option<(&str, &str)> {
 }
 
 fn section(line: &str) -> Option<&str> {
-    line.trim().strip_prefix('[').and_then(|s| s.strip_suffix(']')).map(str::trim)
+    line.trim()
+        .strip_prefix('[')
+        .and_then(|s| s.strip_suffix(']'))
+        .map(str::trim)
 }
 
 fn expand(url: &str, repo: &str, arch: &str) -> Option<String> {
@@ -37,7 +40,12 @@ fn expand(url: &str, repo: &str, arch: &str) -> Option<String> {
 
 /// `read_include` maps an Include path (possibly a glob) to its contents (injected for tests).
 /// At most `max` distinct servers are kept per repo, in file order.
-pub fn parse_conf(text: &str, arch: &str, read_include: &dyn Fn(&str) -> Option<String>, max: usize) -> Vec<Repo> {
+pub fn parse_conf(
+    text: &str,
+    arch: &str,
+    read_include: &dyn Fn(&str) -> Option<String>,
+    max: usize,
+) -> Vec<Repo> {
     let mut repos: Vec<Repo> = Vec::new();
     let mut in_repo = false;
     let add = |repos: &mut Vec<Repo>, raw: &str| {
@@ -55,7 +63,10 @@ pub fn parse_conf(text: &str, arch: &str, read_include: &dyn Fn(&str) -> Option<
         if let Some(name) = section(line) {
             in_repo = name != "options";
             if in_repo {
-                repos.push(Repo { name: name.into(), servers: vec![] });
+                repos.push(Repo {
+                    name: name.into(),
+                    servers: vec![],
+                });
             }
             continue;
         }
@@ -101,7 +112,11 @@ pub fn parse_options(text: &str) -> Options {
 
 /// Architecture used for `$arch`: the first configured one, or `native` for `auto`/none.
 pub fn expansion_arch(o: &Options, native: &str) -> String {
-    o.arch.iter().find(|a| a.as_str() != "auto").cloned().unwrap_or_else(|| native.to_string())
+    o.arch
+        .iter()
+        .find(|a| a.as_str() != "auto")
+        .cloned()
+        .unwrap_or_else(|| native.to_string())
 }
 
 /// pacman.conf with every `XferCommand` line commented out, so the database refresh
@@ -162,7 +177,13 @@ mod tests {
         let conf = "[options]\nSigLevel = Required\n[core]\nInclude=/etc/pacman.d/mirrorlist\n[extra]\n  Include   =   /etc/pacman.d/mirrorlist  \n";
         let r = parse_conf(conf, "x86_64", &inc, 5);
         assert_eq!(r.len(), 2);
-        assert_eq!(r[0].servers, ["https://a.example/core/os/x86_64", "https://b.example/core/os/x86_64"]);
+        assert_eq!(
+            r[0].servers,
+            [
+                "https://a.example/core/os/x86_64",
+                "https://b.example/core/os/x86_64"
+            ]
+        );
         assert_eq!(r[1].name, "extra");
     }
 
@@ -182,7 +203,12 @@ mod tests {
 
     #[test]
     fn cachyos_arch_v3_expands() {
-        let r = parse_conf("[cachyos-v3]\nServer = https://m/repo/$arch_v3/$repo\n", "x86_64", &|_| None, 5);
+        let r = parse_conf(
+            "[cachyos-v3]\nServer = https://m/repo/$arch_v3/$repo\n",
+            "x86_64",
+            &|_| None,
+            5,
+        );
         assert_eq!(r[0].servers, ["https://m/repo/x86_64_v3/cachyos-v3"]);
     }
 
@@ -191,12 +217,20 @@ mod tests {
         let o = parse_options("[options]\nCacheDir = /a/ /b/\nCacheDir=/c\nArchitecture = x86_64 x86_64_v3\n[core]\nCacheDir = /ignored\n");
         assert_eq!(o.cache_dirs, ["/a/", "/b/", "/c"]);
         assert_eq!(expansion_arch(&o, "aarch64"), "x86_64");
-        assert_eq!(expansion_arch(&parse_options("[options]\nArchitecture = auto\n"), "aarch64"), "aarch64");
+        assert_eq!(
+            expansion_arch(
+                &parse_options("[options]\nArchitecture = auto\n"),
+                "aarch64"
+            ),
+            "aarch64"
+        );
     }
 
     #[test]
     fn xfer_command_is_disabled_and_rest_kept() {
-        let s = strip_xfer("[options]\nXferCommand = /usr/bin/curl -o %o %u\n#XferCommand = x\nHoldPkg = pacman\n");
+        let s = strip_xfer(
+            "[options]\nXferCommand = /usr/bin/curl -o %o %u\n#XferCommand = x\nHoldPkg = pacman\n",
+        );
         assert!(!s.lines().any(|l| l.starts_with("XferCommand")));
         assert!(s.contains("#XferCommand = x") && s.contains("HoldPkg = pacman"));
     }

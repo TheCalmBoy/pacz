@@ -76,9 +76,16 @@ pub fn parse_config(text: &str) -> Result<Config, String> {
             continue;
         }
         let err = |m: &str| format!("line {}: {m}", n + 1);
-        let (k, v) = line.split_once('=').ok_or_else(|| err("expected key = value"))?;
+        let (k, v) = line
+            .split_once('=')
+            .ok_or_else(|| err("expected key = value"))?;
         let (k, v) = (k.trim(), v.trim());
-        let num = |v: &str| v.parse::<usize>().ok().filter(|&x| x > 0).ok_or_else(|| err("expected a positive number"));
+        let num = |v: &str| {
+            v.parse::<usize>()
+                .ok()
+                .filter(|&x| x > 0)
+                .ok_or_else(|| err("expected a positive number"))
+        };
         let flag = |v: &str| boolean(v).ok_or_else(|| err("expected true or false"));
         match k {
             "pacman" => c.pacman_bin = v.into(),
@@ -92,7 +99,9 @@ pub fn parse_config(text: &str) -> Result<Config, String> {
             "mirrors" => c.mirrors = num(v)?,
             "batch_max" => c.batch_max = num(v)?,
             "batch_min" => c.batch_min = num(v)?,
-            "small_size" => c.small_bytes = parse_size(v).ok_or_else(|| err("expected a size like 8MiB"))?,
+            "small_size" => {
+                c.small_bytes = parse_size(v).ok_or_else(|| err("expected a size like 8MiB"))?
+            }
             "check_integrity" => c.check_integrity = flag(v)?,
             "aria2_args" => c.aria2_args = v.split_whitespace().map(String::from).collect(),
             "fallback_to_pacman" => c.fallback_to_pacman = flag(v)?,
@@ -113,7 +122,10 @@ mod tests {
     fn defaults_and_overrides() {
         assert_eq!(parse_config("# nothing\n\n").unwrap(), Config::default());
         let c = parse_config("workers = 4\nsmall_size = 2MiB\nstate_dir = none\naur = no\naria2 = aria2c\naria2_args = --async-dns=false -x2\n").unwrap();
-        assert_eq!((c.workers, c.small_bytes, c.state_dir.clone(), c.aur), (4, 2 << 20, None, false));
+        assert_eq!(
+            (c.workers, c.small_bytes, c.state_dir.clone(), c.aur),
+            (4, 2 << 20, None, false)
+        );
         assert_eq!((c.aria2_bin.as_str(), c.aria2_args.len()), ("aria2c", 2));
     }
 

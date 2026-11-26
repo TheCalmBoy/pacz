@@ -49,7 +49,10 @@ pub fn parse_rows_checked(output: &str) -> Result<Vec<Pkg>, String> {
 
         let lower = line.to_ascii_lowercase();
         if lower.starts_with("error:") {
-            return Err(format!("pacman reported an error on line {}: {line}", index + 1));
+            return Err(format!(
+                "pacman reported an error on line {}: {line}",
+                index + 1
+            ));
         }
         if lower.starts_with("warning:")
             || lower.starts_with("::")
@@ -71,12 +74,20 @@ pub fn parse_rows_checked(output: &str) -> Result<Vec<Pkg>, String> {
 
         let fields: Vec<&str> = line.split_whitespace().collect();
         let looks_like_package_row = fields.len() >= 5
-            && (fields.get(2).is_some_and(|size| size.parse::<u64>().is_ok())
+            && (fields
+                .get(2)
+                .is_some_and(|size| size.parse::<u64>().is_ok())
                 || fields.get(3).is_some_and(|file| file.contains(".pkg")));
         if looks_like_package_row {
-            return Err(format!("could not parse pacman package row on line {}", index + 1));
+            return Err(format!(
+                "could not parse pacman package row on line {}",
+                index + 1
+            ));
         }
-        return Err(format!("unexpected pacman --print output on line {}: {line}", index + 1));
+        return Err(format!(
+            "unexpected pacman --print output on line {}: {line}",
+            index + 1
+        ));
     }
     Ok(packages)
 }
@@ -139,7 +150,10 @@ mod tests {
         );
         let p = parse_rows(&out);
         assert_eq!(p.len(), 2);
-        assert_eq!((p[0].name.as_str(), p[0].version.as_str(), p[0].size), ("bash", "5.2-1", 1_500_000));
+        assert_eq!(
+            (p[0].name.as_str(), p[0].version.as_str(), p[0].size),
+            ("bash", "5.2-1", 1_500_000)
+        );
         assert!(!p[0].is_cached());
         assert!(p[1].is_cached());
         assert_eq!(p[1].version, "1:8.0-1");
@@ -147,7 +161,9 @@ mod tests {
 
     #[test]
     fn missing_or_bad_sha_is_none_not_a_parse_failure() {
-        let p = parse_rows("a 1-1 1 a.pkg core https://m/a.pkg\nb 1-1 1 b.pkg core https://m/b.pkg nothex\n");
+        let p = parse_rows(
+            "a 1-1 1 a.pkg core https://m/a.pkg\nb 1-1 1 b.pkg core https://m/b.pkg nothex\n",
+        );
         assert_eq!(p.len(), 2);
         assert!(p.iter().all(|x| x.sha256.is_none()));
     }
@@ -162,22 +178,36 @@ mod tests {
     #[test]
     fn checked_parser_skips_noise_but_rejects_malformed_package_rows() {
         let row = format!("bash 5.2-1 1500000 bash.pkg.tar.zst core https://m/bash.pkg {SHA}");
-        let parsed = parse_rows_checked(&format!("warning: old database\nthere is nothing to do\n{row}\n")).unwrap();
+        let parsed = parse_rows_checked(&format!(
+            "warning: old database\nthere is nothing to do\n{row}\n"
+        ))
+        .unwrap();
         assert_eq!(parsed.len(), 1);
-        assert!(parse_rows_checked("bash 5.2-1 nope bash.pkg.tar.zst core https://m/bash.pkg").unwrap_err().contains("line 1"));
-        assert!(parse_rows_checked(&format!("bash 5.2-1 1500000 ../bash.pkg core https://m/bash.pkg {SHA}")).is_err());
+        assert!(
+            parse_rows_checked("bash 5.2-1 nope bash.pkg.tar.zst core https://m/bash.pkg")
+                .unwrap_err()
+                .contains("line 1")
+        );
+        assert!(parse_rows_checked(&format!(
+            "bash 5.2-1 1500000 ../bash.pkg core https://m/bash.pkg {SHA}"
+        ))
+        .is_err());
         assert!(parse_rows_checked("unexpected pacman output").is_err());
         assert!(parse_rows_checked("error: package conflict").is_err());
     }
 
     #[test]
     fn parses_arch_pacman_print_and_cached_fixtures() {
-        let fresh = parse_rows_checked(include_str!("../tests/fixtures/pacman-print-s.txt")).unwrap();
+        let fresh =
+            parse_rows_checked(include_str!("../tests/fixtures/pacman-print-s.txt")).unwrap();
         assert_eq!(fresh.len(), 5);
-        assert!(fresh.iter().any(|p| p.name == "go" && p.version.starts_with("2:1.27")));
+        assert!(fresh
+            .iter()
+            .any(|p| p.name == "go" && p.version.starts_with("2:1.27")));
         assert!(fresh.iter().all(|p| !p.is_cached()));
 
-        let cached = parse_rows_checked(include_str!("../tests/fixtures/pacman-print-cached.txt")).unwrap();
+        let cached =
+            parse_rows_checked(include_str!("../tests/fixtures/pacman-print-cached.txt")).unwrap();
         assert_eq!(cached.len(), 3);
         assert!(cached.iter().all(|p| p.is_cached() && p.size == 0));
     }

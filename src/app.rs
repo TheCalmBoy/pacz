@@ -9,7 +9,10 @@ use crate::conf::{expansion_arch, parse_conf, parse_options, strip_xfer, wildcar
 use crate::config::{parse_config, Config};
 use crate::driver::{write_private, Aria2Runner};
 use crate::fmt::{human, strip_ansi};
-use crate::pacman::{download_only_args, flag_value, install_args, installed_query_args, query_args, refresh_args, Cli, Op};
+use crate::pacman::{
+    download_only_args, flag_value, install_args, installed_query_args, query_args, refresh_args,
+    Cli, Op,
+};
 use crate::plan::{labels, plan, Plan, PlanCfg, Task};
 use crate::render::{self, Dashboard};
 use crate::rows::{parse_rows_checked, Pkg};
@@ -40,8 +43,9 @@ options: pacman's options are passed through (--needed, --overwrite, --ignore, .
          --noconfirm   no selector and no prompts (also forwarded to paru, see aur_noconfirm)
          --dry-run     show the download plan; changes nothing, needs no root
 
-selector: numbers/ranges toggle ignore (1 3 5-7), s/n sort by size/name,
-          /text search, c clear, Enter continue, q quit
+selector: arrows/j/k or mouse wheel move, Space ignore, / search,
+          s/n sort, c clear, Enter continue, q quit
+          non-interactive: numbers/ranges, /text, s/n, c, Enter, q
 config:   /etc/pacz.conf (override with PACZ_CONFIG)
 ";
 
@@ -62,7 +66,10 @@ impl Logger {
 
     pub fn log(&self, msg: &str) {
         if let Some(f) = &self.0 {
-            let t = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            let t = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
             if let Ok(mut f) = f.lock() {
                 let _ = writeln!(f, "{t} {msg}");
             }
@@ -85,7 +92,10 @@ pub struct Env {
 }
 
 fn default_staging(cache: &Path) -> PathBuf {
-    cache.parent().map(|p| p.join("pacz-staging")).unwrap_or_else(|| cache.join(".pacz-staging"))
+    cache
+        .parent()
+        .map(|p| p.join("pacz-staging"))
+        .unwrap_or_else(|| cache.join(".pacz-staging"))
 }
 
 /// Include reader with glob support in the file name (`/etc/pacman.d/*.conf`).
@@ -99,27 +109,58 @@ pub fn read_include(p: &str) -> Option<String> {
         .ok()?
         .filter_map(Result::ok)
         .map(|e| e.path())
-        .filter(|f| f.file_name().and_then(|n| n.to_str()).is_some_and(|n| wildcard_match(pat, n)))
+        .filter(|f| {
+            f.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| wildcard_match(pat, n))
+        })
         .collect();
     files.sort();
-    Some(files.iter().filter_map(|f| fs::read_to_string(f).ok()).collect::<Vec<_>>().join("\n"))
+    Some(
+        files
+            .iter()
+            .filter_map(|f| fs::read_to_string(f).ok())
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
 }
 
 impl Env {
-    pub fn load(cli: &Cli, cfg: Config, tty: bool, color: bool, sudo_user: Option<String>) -> Result<Env, String> {
-        let pacman_conf = PathBuf::from(flag_value(&cli.passthrough, "--config").unwrap_or("/etc/pacman.conf"));
-        let text = fs::read_to_string(&pacman_conf).map_err(|e| format!("cannot read {}: {e}", pacman_conf.display()))?;
+    pub fn load(
+        cli: &Cli,
+        cfg: Config,
+        tty: bool,
+        color: bool,
+        sudo_user: Option<String>,
+    ) -> Result<Env, String> {
+        let pacman_conf =
+            PathBuf::from(flag_value(&cli.passthrough, "--config").unwrap_or("/etc/pacman.conf"));
+        let text = fs::read_to_string(&pacman_conf)
+            .map_err(|e| format!("cannot read {}: {e}", pacman_conf.display()))?;
         let opts = parse_options(&text);
         let cache_dir = flag_value(&cli.passthrough, "--cachedir")
             .map(PathBuf::from)
             .or_else(|| cfg.cache_dir.clone())
             .or_else(|| opts.cache_dirs.first().map(PathBuf::from))
             .unwrap_or_else(|| PathBuf::from("/var/cache/pacman/pkg"));
-        let staging_dir = cfg.staging_dir.clone().unwrap_or_else(|| default_staging(&cache_dir));
+        let staging_dir = cfg
+            .staging_dir
+            .clone()
+            .unwrap_or_else(|| default_staging(&cache_dir));
         let arch = expansion_arch(&opts, std::env::consts::ARCH);
         let repos = parse_conf(&text, &arch, &read_include, cfg.mirrors);
         let log = Logger::open(cfg.log_file.as_deref())?;
-        Ok(Env { cfg, pacman_conf, cache_dir, staging_dir, repos, tty, color, sudo_user, log })
+        Ok(Env {
+            cfg,
+            pacman_conf,
+            cache_dir,
+            staging_dir,
+            repos,
+            tty,
+            color,
+            sudo_user,
+            log,
+        })
     }
 }
 
@@ -128,11 +169,17 @@ fn heading(env: &Env, msg: &str) {
 }
 
 fn error(msg: &str) {
-    eprintln!("{} {msg}", render::paint("error:".into(), "1;31", sys::isatty(2)));
+    eprintln!(
+        "{} {msg}",
+        render::paint("error:".into(), "1;31", sys::isatty(2))
+    );
 }
 
 fn warn(msg: &str) {
-    eprintln!("{} {msg}", render::paint("warning:".into(), "1;33", sys::isatty(2)));
+    eprintln!(
+        "{} {msg}",
+        render::paint("warning:".into(), "1;33", sys::isatty(2))
+    );
 }
 
 fn merge(into: &mut Vec<String>, add: Vec<String>) {
@@ -167,6 +214,14 @@ fn confirm(msg: &str) -> bool {
 /// Runs the selector. `Some(ignored names)` to continue, `None` if the user quit.
 fn select(env: &Env, title: &str, items: Vec<Item>) -> Option<Vec<String>> {
     let mut sel = Selector::new(items);
+    if env.tty && sys::isatty(0) {
+        match crate::select_ui::run(title, &mut sel, env.color) {
+            Ok(result) => return result,
+            Err(e) => warn(&format!(
+                "interactive selector unavailable ({e}); using text input"
+            )),
+        }
+    }
     let mut show = true;
     loop {
         if show {
@@ -194,7 +249,9 @@ fn exec_pacman(bin: &str, args: &[String]) -> u8 {
 }
 
 fn load_config() -> Result<Config, String> {
-    let path = std::env::var_os("PACZ_CONFIG").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/etc/pacz.conf"));
+    let path = std::env::var_os("PACZ_CONFIG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/etc/pacz.conf"));
     match fs::read_to_string(&path) {
         Ok(t) => parse_config(&t).map_err(|e| format!("{}: {e}", path.display())),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Config::default()),
@@ -260,7 +317,14 @@ pub fn main(cli: Cli) -> u8 {
 
 /// `-S`, `-Sy`, `-Su`, `-Syu`, `-Sw`.
 pub fn run_sync(env: &Env, mut cli: Cli) -> u8 {
-    let Op::Sync { refresh, upgrade, download_only } = cli.op else { return 2 };
+    let Op::Sync {
+        refresh,
+        upgrade,
+        download_only,
+    } = cli.op
+    else {
+        return 2;
+    };
     if flag_value(&cli.passthrough, "--sysroot").is_some() {
         error("--sysroot is not supported by pacz; use pacman directly");
         return 2;
@@ -302,7 +366,14 @@ pub fn run_sync(env: &Env, mut cli: Cli) -> u8 {
                             return 1;
                         }
                     };
-                    heading(env, &format!("{} packages after ignoring {}", pkgs.len(), cli.ignore.join(", ")));
+                    heading(
+                        env,
+                        &format!(
+                            "{} packages after ignoring {}",
+                            pkgs.len(),
+                            cli.ignore.join(", ")
+                        ),
+                    );
                 }
                 Some(_) => {}
             }
@@ -321,7 +392,11 @@ pub fn run_sync(env: &Env, mut cli: Cli) -> u8 {
         }
         true
     } else {
-        let plan_cfg = PlanCfg { small_bytes: env.cfg.small_bytes, batch_max: env.cfg.batch_max, batch_min: env.cfg.batch_min };
+        let plan_cfg = PlanCfg {
+            small_bytes: env.cfg.small_bytes,
+            batch_max: env.cfg.batch_max,
+            batch_min: env.cfg.batch_min,
+        };
         let p = plan(pkgs, &plan_cfg);
         if cli.dry_run {
             for l in describe_plan(&p, &env.repos) {
@@ -340,9 +415,15 @@ pub fn run_sync(env: &Env, mut cli: Cli) -> u8 {
                 return 1;
             }
             if download_only {
-                warn(&format!("no sha256 in the sync database for: {}; pacman will download and verify these", names.join(", ")));
+                warn(&format!(
+                    "no sha256 in the sync database for: {}; pacman will download and verify these",
+                    names.join(", ")
+                ));
             } else {
-                warn(&format!("no sha256 in the sync database for: {}; pacman will download these itself", names.join(", ")));
+                warn(&format!(
+                    "no sha256 in the sync database for: {}; pacman will download these itself",
+                    names.join(", ")
+                ));
             }
         }
         if !p.tasks.is_empty() {
@@ -352,13 +433,19 @@ pub fn run_sync(env: &Env, mut cli: Cli) -> u8 {
                 Outcome::Interrupted => return 130,
             }
         } else if !p.cached.is_empty() {
-            heading(env, &format!("All {} packages are already in the cache", p.cached.len()));
+            heading(
+                env,
+                &format!("All {} packages are already in the cache", p.cached.len()),
+            );
         }
         if download_only {
             if !p.no_sha.is_empty() && !download_missing_with_pacman(env, &cli) {
                 return 1;
             }
-            heading(env, "Downloads complete; nothing installed (--downloadonly)");
+            heading(
+                env,
+                "Downloads complete; nothing installed (--downloadonly)",
+            );
             return 0;
         }
         install(env, &cli)
@@ -373,11 +460,19 @@ pub fn run_sync(env: &Env, mut cli: Cli) -> u8 {
 }
 
 fn refresh_dbs(env: &Env, cli: &Cli) -> Result<(), String> {
-    let text = fs::read_to_string(&env.pacman_conf).map_err(|e| format!("cannot read {}: {e}", env.pacman_conf.display()))?;
-    let tmp = env.cfg.tmp_dir.join(format!("pacz-pacman-{}.conf", std::process::id()));
-    write_private(&tmp, &strip_xfer(&text)).map_err(|e| format!("cannot write {}: {e}", tmp.display()))?;
+    let text = fs::read_to_string(&env.pacman_conf)
+        .map_err(|e| format!("cannot read {}: {e}", env.pacman_conf.display()))?;
+    let tmp = env
+        .cfg
+        .tmp_dir
+        .join(format!("pacz-pacman-{}.conf", std::process::id()));
+    write_private(&tmp, &strip_xfer(&text))
+        .map_err(|e| format!("cannot write {}: {e}", tmp.display()))?;
     let status = refresh_args(cli, &tmp.to_string_lossy()).and_then(|a| {
-        Command::new(&env.cfg.pacman_bin).args(a).status().map_err(|e| format!("cannot run {}: {e}", env.cfg.pacman_bin))
+        Command::new(&env.cfg.pacman_bin)
+            .args(a)
+            .status()
+            .map_err(|e| format!("cannot run {}: {e}", env.cfg.pacman_bin))
     });
     let _ = fs::remove_file(&tmp);
     match status {
@@ -420,13 +515,18 @@ fn query(env: &Env, cli: &Cli) -> Result<Vec<Pkg>, String> {
         }
         return Err(msg);
     }
-    let pkgs = parse_rows_checked(&stdout).map_err(|e| format!("pacman returned unexpected --print output: {e}"))?;
+    let pkgs = parse_rows_checked(&stdout)
+        .map_err(|e| format!("pacman returned unexpected --print output: {e}"))?;
     env.log.log(&format!("query: {} packages", pkgs.len()));
     Ok(pkgs)
 }
 
 fn installed_versions(env: &Env, cli: &Cli, names: &[String]) -> HashMap<String, String> {
-    let Ok(out) = Command::new(&env.cfg.pacman_bin).args(installed_query_args(cli, names)).stdin(Stdio::null()).output() else {
+    let Ok(out) = Command::new(&env.cfg.pacman_bin)
+        .args(installed_query_args(cli, names))
+        .stdin(Stdio::null())
+        .output()
+    else {
         return HashMap::new();
     };
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
@@ -447,18 +547,38 @@ fn repo_items(env: &Env, cli: &Cli, pkgs: &[Pkg]) -> Vec<Item> {
         .map(|p| {
             let old = installed.get(&p.name).map_or("(new)", String::as_str);
             let cached = if p.is_cached() { "  (cached)" } else { "" };
-            Item { name: p.name.clone(), detail: format!("{old} -> {}{cached}", p.version), size: Some(p.size) }
+            Item {
+                name: p.name.clone(),
+                detail: format!("{old} -> {}{cached}", p.version),
+                size: Some(p.size),
+            }
         })
         .collect()
 }
 
 fn print_details(env: &Env, pkgs: &[Pkg]) {
     let total: u64 = pkgs.iter().map(|p| p.size).sum();
-    heading(env, &format!("Packages ({})  download size: {}", pkgs.len(), human(total)));
-    let nw = pkgs.iter().map(|p| p.name.chars().count()).max().unwrap_or(0).min(40);
+    heading(
+        env,
+        &format!("Packages ({})  download size: {}", pkgs.len(), human(total)),
+    );
+    let nw = pkgs
+        .iter()
+        .map(|p| p.name.chars().count())
+        .max()
+        .unwrap_or(0)
+        .min(40);
     for p in pkgs {
-        let size = if p.is_cached() { "cached".to_string() } else { human(p.size) };
-        println!("  {}  {:<24}  {size:>9}", render::fit(&p.name, nw), p.version);
+        let size = if p.is_cached() {
+            "cached".to_string()
+        } else {
+            human(p.size)
+        };
+        println!(
+            "  {}  {:<24}  {size:>9}",
+            render::fit(&p.name, nw),
+            p.version
+        );
     }
 }
 
@@ -473,12 +593,19 @@ pub fn describe_plan(p: &Plan, repos: &[Repo]) -> Vec<String> {
         p.no_sha.len()
     )];
     for (t, label) in p.tasks.iter().zip(labels(&p.tasks)) {
-        let kind = if matches!(t, Task::Batch(_)) { "batch" } else { "single" };
+        let kind = if matches!(t, Task::Batch(_)) {
+            "batch"
+        } else {
+            "single"
+        };
         let mirrors = t.pkgs().first().map_or(0, |pk| match resolve(repos, pk) {
             Source::Urls(u) => u.len(),
             _ => 0,
         });
-        out.push(format!("  {kind:<7} {label:<30} {:>9}  mirrors={mirrors}", human(t.bytes())));
+        out.push(format!(
+            "  {kind:<7} {label:<30} {:>9}  mirrors={mirrors}",
+            human(t.bytes())
+        ));
     }
     out
 }
@@ -506,22 +633,49 @@ fn redraw(env: &Env, dash: &Dashboard, drawn: usize) -> usize {
 fn download(env: &Env, tasks: &[Task], cached: usize) -> Outcome {
     let total: u64 = tasks.iter().map(Task::bytes).sum();
     let count: usize = tasks.iter().map(|t| t.pkgs().len()).sum();
-    for dir in [Some(&env.staging_dir), env.cfg.state_dir.as_ref()].into_iter().flatten() {
+    for dir in [Some(&env.staging_dir), env.cfg.state_dir.as_ref()]
+        .into_iter()
+        .flatten()
+    {
         if let Err(e) = fs::create_dir_all(dir) {
             error(&format!("cannot create {}: {e}", dir.display()));
             return Outcome::Failed;
         }
     }
-    let cached_note = if cached > 0 { format!(", {cached} already cached") } else { String::new() };
-    heading(env, &format!("Downloading {count} packages ({}) in {} aria2 runs{cached_note}", human(total), tasks.len()));
-    env.log.log(&format!("download: {count} packages, {} tasks", tasks.len()));
+    let cached_note = if cached > 0 {
+        format!(", {cached} already cached")
+    } else {
+        String::new()
+    };
+    heading(
+        env,
+        &format!(
+            "Downloading {count} packages ({}) in {} aria2 runs{cached_note}",
+            human(total),
+            tasks.len()
+        ),
+    );
+    env.log.log(&format!(
+        "download: {count} packages, {} tasks",
+        tasks.len()
+    ));
 
     let dash = Dashboard::new();
-    for (i, (t, l)) in tasks.iter().zip(labels(tasks)).enumerate() {
-        dash.add(i, &l, t.bytes());
+    for (i, task) in tasks.iter().enumerate() {
+        dash.add_task(
+            i,
+            task.pkgs()
+                .iter()
+                .map(|p| (p.name.clone(), p.file.clone(), p.size)),
+        );
     }
-    let mut runner =
-        Aria2Runner::new(env.cfg.aria2_bin.clone(), env.cache_dir.clone(), env.staging_dir.clone(), env.cfg.tmp_dir.clone(), env.repos.clone());
+    let mut runner = Aria2Runner::new(
+        env.cfg.aria2_bin.clone(),
+        env.cache_dir.clone(),
+        env.staging_dir.clone(),
+        env.cfg.tmp_dir.clone(),
+        env.repos.clone(),
+    );
     runner.state_dir = env.cfg.state_dir.clone();
     runner.check_integrity = env.cfg.check_integrity;
     runner.extra_args = env.cfg.aria2_args.clone();
@@ -529,7 +683,7 @@ fn download(env: &Env, tasks: &[Task], cached: usize) -> Outcome {
         runner.on_progress = Some(dash.progress_fn());
     }
     let on_done = |id: usize, res: &[PkgResult]| {
-        dash.finish(id, res.iter().all(|(_, r)| r.is_ok()));
+        dash.finish_task(id, res);
         for (name, r) in res {
             let line = match r {
                 Ok(()) => format!("completed: {name}"),
@@ -567,18 +721,27 @@ fn download(env: &Env, tasks: &[Task], cached: usize) -> Outcome {
             let _ = io::stdout().flush();
         }
         let results: Vec<PkgResult> = handle.join().unwrap_or_else(|_| {
-            tasks.iter().flat_map(|t| t.pkgs()).map(|p| (p.name.clone(), Err("internal error".to_string()))).collect()
+            tasks
+                .iter()
+                .flat_map(|t| t.pkgs())
+                .map(|p| (p.name.clone(), Err("internal error".to_string())))
+                .collect()
         });
         (results, interrupted)
     });
 
     if interrupted {
-        error("interrupted: nothing was installed; partial downloads are kept and resume next time");
+        error(
+            "interrupted: nothing was installed; partial downloads are kept and resume next time",
+        );
         return Outcome::Interrupted;
     }
     let failed: Vec<&PkgResult> = results.iter().filter(|(_, r)| r.is_err()).collect();
     if !failed.is_empty() {
-        error(&format!("{} of {count} packages failed to download; not starting pacman:", failed.len()));
+        error(&format!(
+            "{} of {count} packages failed to download; not starting pacman:",
+            failed.len()
+        ));
         for (name, r) in failed {
             if let Err(e) = r {
                 eprintln!("  {name}: {e}");
@@ -620,7 +783,8 @@ fn download_missing_with_pacman(env: &Env, cli: &Cli) -> bool {
             return false;
         }
     };
-    env.log.log(&format!("download fallback: pacman {}", args.join(" ")));
+    env.log
+        .log(&format!("download fallback: pacman {}", args.join(" ")));
     match Command::new(&env.cfg.pacman_bin).args(args).status() {
         Ok(s) if s.success() => true,
         Ok(s) => {
@@ -667,7 +831,10 @@ fn aur_step(env: &Env, cli: &Cli) -> bool {
         }
     };
     heading(env, "Checking AUR updates");
-    let out = match paru(env, &user, &aur::qua_args()).stdin(Stdio::null()).output() {
+    let out = match paru(env, &user, &aur::qua_args())
+        .stdin(Stdio::null())
+        .output()
+    {
         Ok(o) => o,
         Err(e) => {
             error(&format!("cannot run {}: {e}", env.cfg.paru_bin));
@@ -679,7 +846,10 @@ fn aur_step(env: &Env, cli: &Cli) -> bool {
     let updates = aur::parse_qua(&stdout);
     if updates.is_empty() {
         // `paru -Qua` exits 1 when there is nothing to update; only real errors fail.
-        if stderr.lines().any(|l| strip_ansi(l).trim_start().starts_with("error")) {
+        if stderr
+            .lines()
+            .any(|l| strip_ansi(l).trim_start().starts_with("error"))
+        {
             error(&format!("paru -Qua failed:\n{}", stderr.trim()));
             return false;
         }
@@ -692,7 +862,14 @@ fn aur_step(env: &Env, cli: &Cli) -> bool {
             warn("--noconfirm is passed to paru: PKGBUILDs and diffs will not be shown for review");
         }
     } else {
-        let items = updates.iter().map(|u| Item { name: u.name.clone(), detail: format!("{} -> {}", u.old, u.new), size: None }).collect();
+        let items = updates
+            .iter()
+            .map(|u| Item {
+                name: u.name.clone(),
+                detail: format!("{} -> {}", u.old, u.new),
+                size: None,
+            })
+            .collect();
         match select(env, "AUR updates", items) {
             None => {
                 heading(env, "AUR updates skipped");
@@ -706,7 +883,8 @@ fn aur_step(env: &Env, cli: &Cli) -> bool {
         return true;
     }
     let args = aur::sua_args(cli.noconfirm && env.cfg.aur_noconfirm, &ignore);
-    env.log.log(&format!("aur: paru {} (as {name})", args.join(" ")));
+    env.log
+        .log(&format!("aur: paru {} (as {name})", args.join(" ")));
     match paru(env, &user, &args).status() {
         Ok(s) if s.success() => true,
         Ok(s) => {
@@ -772,7 +950,9 @@ exit $rc
         let mut rows = String::new();
         let mut row = |name: &str, size: u64| {
             let file = format!("{name}-1-1-x86_64.pkg.tar.zst");
-            rows.push_str(&format!("{name} 1-1 {size} {file} core https://m.example/core/os/x86_64/{file} {sha}\n"));
+            rows.push_str(&format!(
+                "{name} 1-1 {size} {file} core https://m.example/core/os/x86_64/{file} {sha}\n"
+            ));
         };
         for i in 0..150u64 {
             row(&format!("tiny{i}"), 1000 + i);
@@ -814,7 +994,11 @@ exit $rc
     }
 
     fn lines(p: PathBuf) -> Vec<String> {
-        fs::read_to_string(p).unwrap_or_default().lines().map(String::from).collect()
+        fs::read_to_string(p)
+            .unwrap_or_default()
+            .lines()
+            .map(String::from)
+            .collect()
     }
 
     fn count(p: PathBuf) -> usize {
@@ -824,8 +1008,15 @@ exit $rc
     #[test]
     fn upgrade_batches_downloads_and_forwards_flags_to_both_calls() {
         let f = fixture("ok", &[]);
-        assert_eq!(run(&f, &["-Su", "--needed", "--ignore", "foo", "--noconfirm"]), 0);
-        assert_eq!(lines(f.root.join("aria2.log")).len(), 3 + 4, "3 singles + ceil(150/40) batches");
+        assert_eq!(
+            run(&f, &["-Su", "--needed", "--ignore", "foo", "--noconfirm"]),
+            0
+        );
+        assert_eq!(
+            lines(f.root.join("aria2.log")).len(),
+            3 + 4,
+            "3 singles + ceil(150/40) batches"
+        );
         assert_eq!(count(f.root.join("cache")), 153);
         assert_eq!(count(f.root.join("pacz-staging")), 0, "staging emptied");
         assert_eq!(count(f.root.join("tmp")), 0, "no temp files left");
@@ -857,9 +1048,19 @@ exit $rc
         assert_eq!(run(&f, &["-Syu", "--noconfirm"]), 0);
         let pac = lines(f.root.join("pacman.log"));
         assert_eq!(pac.len(), 3, "{pac:?}");
-        assert!(pac[0].starts_with("-Sy ") && pac[0].contains("pacz-pacman-"), "{}", pac[0]);
-        assert!(!pac[0].contains("/pacman.conf"), "the original conf (with XferCommand) is not used");
-        assert!(!pac[1].contains("-Sy") && !pac[2].contains("-Sy"), "no second refresh");
+        assert!(
+            pac[0].starts_with("-Sy ") && pac[0].contains("pacz-pacman-"),
+            "{}",
+            pac[0]
+        );
+        assert!(
+            !pac[0].contains("/pacman.conf"),
+            "the original conf (with XferCommand) is not used"
+        );
+        assert!(
+            !pac[1].contains("-Sy") && !pac[2].contains("-Sy"),
+            "no second refresh"
+        );
         assert_eq!(count(f.root.join("tmp")), 0);
         let _ = fs::remove_dir_all(&f.root);
     }
@@ -892,7 +1093,11 @@ exit $rc
         let pac = lines(f.root.join("pacman.log"));
         assert_eq!(pac.len(), 1, "{pac:?}");
         assert!(pac[0].ends_with("-- tiny1 big0"), "{}", pac[0]);
-        assert_eq!(count(f.root.join("cache")), 153, "stub pacman returns all rows");
+        assert_eq!(
+            count(f.root.join("cache")),
+            153,
+            "stub pacman returns all rows"
+        );
         let _ = fs::remove_dir_all(&f.root);
     }
 
@@ -903,14 +1108,29 @@ exit $rc
         let selected: Vec<String> = rows.lines().take(2).map(String::from).collect();
         let mut first: Vec<String> = selected[0].split_whitespace().map(String::from).collect();
         first.pop();
-        fs::write(f.root.join("rows.txt"), format!("{}\n{}\n", selected[1], first.join(" "))).unwrap();
+        fs::write(
+            f.root.join("rows.txt"),
+            format!("{}\n{}\n", selected[1], first.join(" ")),
+        )
+        .unwrap();
 
         assert_eq!(run(&f, &["-Sw", "--noconfirm", "tiny0", "tiny1"]), 0);
         let pac = lines(f.root.join("pacman.log"));
-        assert_eq!(pac.len(), 2, "query, then pacman's verified download fallback: {pac:?}");
-        assert!(pac[1].contains("--downloadonly") && pac[1].contains("--noconfirm"), "{}", pac[1]);
+        assert_eq!(
+            pac.len(),
+            2,
+            "query, then pacman's verified download fallback: {pac:?}"
+        );
+        assert!(
+            pac[1].contains("--downloadonly") && pac[1].contains("--noconfirm"),
+            "{}",
+            pac[1]
+        );
         assert!(pac[1].ends_with("-- tiny0 tiny1"), "{}", pac[1]);
-        assert!(f.root.join("cache/tiny1-1-1-x86_64.pkg.tar.zst").exists(), "the sha256 package was downloaded by aria2 first");
+        assert!(
+            f.root.join("cache/tiny1-1-1-x86_64.pkg.tar.zst").exists(),
+            "the sha256 package was downloaded by aria2 first"
+        );
         let _ = fs::remove_dir_all(&f.root);
     }
 

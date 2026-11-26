@@ -2,7 +2,7 @@
 use crate::aria2::BatchProgress;
 use crate::driver::ProgressFn;
 use crate::fmt::human;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 pub const HIDE_CURSOR: &str = "\x1b[?25l";
@@ -12,7 +12,13 @@ pub const CLEAR_BELOW: &str = "\x1b[J";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RowState {
     Waiting,
-    Active { pct: u8, done: u64, speed: u64, conns: u32, eta: Option<u64> },
+    Active {
+        pct: u8,
+        done: u64,
+        speed: u64,
+        conns: u32,
+        eta: Option<u64>,
+    },
     Done,
     Failed,
 }
@@ -87,7 +93,11 @@ pub fn paint(s: String, code: &str, color: bool) -> String {
 
 /// Green `::` heading, as pacman prints them.
 pub fn heading(msg: &str, color: bool) -> String {
-    format!("{} {}", paint("::".into(), "1;32", color), paint(msg.into(), "1", color))
+    format!(
+        "{} {}",
+        paint("::".into(), "1;32", color),
+        paint(msg.into(), "1", color)
+    )
 }
 
 pub fn render_row(row: &Row, width: usize, color: bool) -> String {
@@ -97,25 +107,60 @@ pub fn render_row(row: &Row, width: usize, color: bool) -> String {
         RowState::Waiting => "waiting".to_string(),
         RowState::Failed => paint("FAILED".into(), "31", color),
         RowState::Done => paint(format!("complete  {}", human(row.total)), "32", color),
-        RowState::Active { pct, done, speed, conns, eta: e } => {
-            let sizes = if width >= 80 { format!(" {}/{}", human(*done), human(row.total)) } else { String::new() };
+        RowState::Active {
+            pct,
+            done,
+            speed,
+            conns,
+            eta: e,
+        } => {
+            let sizes = if width >= 80 {
+                format!(" {}/{}", human(*done), human(row.total))
+            } else {
+                String::new()
+            };
             let e = e.map_or("--".to_string(), eta);
-            format!("{} {:>3}%{sizes} {}/s {conns}c {e}", bar(*pct, bw), pct, human(*speed))
+            format!(
+                "{} {:>3}%{sizes} {}/s {conns}c {e}",
+                bar(*pct, bw),
+                pct,
+                human(*speed)
+            )
         }
     };
     format!("  {name} {tail}")
 }
 
 pub fn render_total(pct: u8, done: u64, speed: u64, width: usize) -> String {
-    let bw = if width >= 110 { 30 } else if width >= 80 { 18 } else { 10 };
-    format!("  Total {} {:>3}%  {} downloaded  {}/s", bar(pct, bw), pct, human(done), human(speed))
+    let bw = if width >= 110 {
+        30
+    } else if width >= 80 {
+        18
+    } else {
+        10
+    };
+    format!(
+        "  Total {} {:>3}%  {} downloaded  {}/s",
+        bar(pct, bw),
+        pct,
+        human(done),
+        human(speed)
+    )
 }
 
 /// Shared by download workers (writers) and the redraw loop (reader). Rows are keyed by
 /// task id, so two batches with the same size can never overwrite each other.
+#[derive(Debug, Clone)]
+struct TaskMember {
+    row_id: usize,
+    name: String,
+    file: String,
+}
+
 #[derive(Default)]
 pub struct Dashboard {
     rows: Mutex<BTreeMap<usize, Row>>,
+    task_members: Mutex<HashMap<usize, Vec<TaskMember>>>,
 }
 
 impl Dashboard {
@@ -128,7 +173,38 @@ impl Dashboard {
     }
 
     pub fn add(&self, id: usize, label: &str, total: u64) {
-        self.lock().insert(id, Row { label: label.to_string(), state: RowState::Waiting, total });
+        self.lock().insert(
+            id,
+            Row {
+                label: label.to_string(),
+                state: RowState::Waiting,
+                total,
+            },
+        );
+    }
+
+    /// Adds one visible row per package while retaining the aria2 task grouping.
+    pub fn add_task<I>(&self, task_id: usize, packages: I)
+    where
+        I: IntoIterator<Item = (String, String, u64)>,
+    {
+        let mut task_members = self.task_members.lock().unwrap_or_else(|e| e.into_inner());
+        let mut rows = self.lock();
+        let mut row_id = rows.keys().next_back().map_or(0, |id| id.saturating_add(1));
+        let mut members = Vec::new();
+        for (name, file, total) in packages {
+            rows.insert(
+                row_id,
+                Row {
+                    label: name.clone(),
+                    state: RowState::Waiting,
+                    total,
+                },
+            );
+            members.push(TaskMember { row_id, name, file });
+            row_id = row_id.saturating_add(1);
+        }
+        task_members.insert(task_id, members);
     }
 
     pub fn set(&self, id: usize, state: RowState) {
@@ -141,13 +217,82 @@ impl Dashboard {
         self.set(id, if ok { RowState::Done } else { RowState::Failed });
     }
 
+    pub fn finish_task(&self, task_id: usize, results: &[(String, Result<(), String>)]) {
+        let members = self
+            .task_members
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&task_id)
+            .cloned();
+        let Some(members) = members else {
+            self.finish(task_id, results.iter().all(|(_, result)| result.is_ok()));
+            return;
+        };
+        let mut rows = self.lock();
+        for member in members {
+            let ok = results
+                .iter()
+                .find(|(name, _)| name == &member.name)
+                .is_some_and(|(_, result)| result.is_ok());
+            if let Some(row) = rows.get_mut(&member.row_id) {
+                row.state = if ok { RowState::Done } else { RowState::Failed };
+            }
+        }
+    }
+
+    fn update_task_progress(&self, task_id: usize, progress: &BatchProgress) {
+        let members = self
+            .task_members
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&task_id)
+            .cloned();
+        let Some(members) = members else {
+            self.set(
+                task_id,
+                RowState::Active {
+                    pct: progress.percent(),
+                    done: progress.done(),
+                    speed: progress.speed(),
+                    conns: progress.conns(),
+                    eta: progress.eta(),
+                },
+            );
+            return;
+        };
+        let mut rows = self.lock();
+        for member in members {
+            let Some(p) = progress.file_progress(&member.file) else {
+                continue;
+            };
+            let state = if p.completed {
+                RowState::Done
+            } else if p.active {
+                let pct = if p.total == 0 {
+                    0
+                } else {
+                    ((u128::from(p.done) * 100) / u128::from(p.total)).min(100) as u8
+                };
+                RowState::Active {
+                    pct,
+                    done: p.done,
+                    speed: p.speed,
+                    conns: p.conns,
+                    eta: p.eta,
+                }
+            } else {
+                RowState::Waiting
+            };
+            if let Some(row) = rows.get_mut(&member.row_id) {
+                row.state = state;
+            }
+        }
+    }
+
     /// Callback to hand to `Aria2Runner::on_progress`.
     pub fn progress_fn(self: &Arc<Self>) -> ProgressFn {
         let me = Arc::clone(self);
-        Box::new(move |id: usize, p: &BatchProgress| {
-            let state = RowState::Active { pct: p.percent(), done: p.done(), speed: p.speed(), conns: p.conns(), eta: p.eta() };
-            me.set(id, state);
-        })
+        Box::new(move |id: usize, p: &BatchProgress| me.update_task_progress(id, p))
     }
 
     /// Active rows first, then waiting, failed, done; at most `max_rows` rows (plus a
@@ -166,7 +311,9 @@ impl Dashboard {
             total += r.total;
             match &r.state {
                 RowState::Done => done += r.total,
-                RowState::Active { done: d, speed: s, .. } => {
+                RowState::Active {
+                    done: d, speed: s, ..
+                } => {
                     done += d;
                     speed += s;
                 }
@@ -175,12 +322,21 @@ impl Dashboard {
         }
         let w = width.saturating_sub(1).max(20);
         let shown = list.len().min(max_rows.max(1));
-        let mut lines: Vec<String> = list.iter().take(shown).map(|r| format!("\x1b[2K{}", clip(&render_row(r, width, color), w))).collect();
+        let mut lines: Vec<String> = list
+            .iter()
+            .take(shown)
+            .map(|r| format!("\x1b[2K{}", clip(&render_row(r, width, color), w)))
+            .collect();
         if list.len() > shown {
             lines.push(format!("\x1b[2K  … {} more", list.len() - shown));
         }
-        let pct = (done.min(total) * 100).checked_div(total).map_or(100, |v| v as u8);
-        lines.push(format!("\x1b[2K{}", clip(&render_total(pct, done, speed, width), w)));
+        let pct = (done.min(total) * 100)
+            .checked_div(total)
+            .map_or(100, |v| v as u8);
+        lines.push(format!(
+            "\x1b[2K{}",
+            clip(&render_total(pct, done, speed, width), w)
+        ));
         lines
     }
 }
@@ -201,7 +357,10 @@ mod tests {
 
     #[test]
     fn eta_and_bar() {
-        assert_eq!((eta(42).as_str(), eta(185).as_str(), eta(3720).as_str()), ("42s", "3m05s", "1h02m"));
+        assert_eq!(
+            (eta(42).as_str(), eta(185).as_str(), eta(3720).as_str()),
+            ("42s", "3m05s", "1h02m")
+        );
         assert_eq!(bar(50, 10), "[#####-----]");
         assert_eq!(bar(0, 4), "[----]");
         assert_eq!(bar(250, 4), "[####]"); // clamped
@@ -209,17 +368,47 @@ mod tests {
 
     #[test]
     fn row_states_wide() {
-        let r = |state| Row { label: "linux-cachyos-headers".into(), state, total: 10 << 20 };
+        let r = |state| Row {
+            label: "linux-cachyos-headers".into(),
+            state,
+            total: 10 << 20,
+        };
         assert!(render_row(&r(RowState::Waiting), 120, false).ends_with("waiting"));
         assert!(render_row(&r(RowState::Failed), 120, false).ends_with("FAILED"));
         assert!(render_row(&r(RowState::Done), 120, false).ends_with("complete  10MiB"));
-        let a = render_row(&r(RowState::Active { pct: 50, done: 5 << 20, speed: 2 << 20, conns: 8, eta: Some(185) }), 120, false);
-        assert!(a.contains("50%") && a.contains("5MiB/10MiB") && a.contains("2MiB/s") && a.ends_with("8c 3m05s"), "{a}");
+        let a = render_row(
+            &r(RowState::Active {
+                pct: 50,
+                done: 5 << 20,
+                speed: 2 << 20,
+                conns: 8,
+                eta: Some(185),
+            }),
+            120,
+            false,
+        );
+        assert!(
+            a.contains("50%")
+                && a.contains("5MiB/10MiB")
+                && a.contains("2MiB/s")
+                && a.ends_with("8c 3m05s"),
+            "{a}"
+        );
     }
 
     #[test]
     fn narrow_terminal_drops_sizes_and_truncates_unicode_names() {
-        let row = Row { label: "ünïcödé-päckage-näme-très-long".into(), state: RowState::Active { pct: 10, done: 1, speed: 1, conns: 1, eta: None }, total: 100 };
+        let row = Row {
+            label: "ünïcödé-päckage-näme-très-long".into(),
+            state: RowState::Active {
+                pct: 10,
+                done: 1,
+                speed: 1,
+                conns: 1,
+                eta: None,
+            },
+            total: 100,
+        };
         let s = render_row(&row, 60, false);
         assert!(!s.contains('/') || s.contains("B/s"));
         assert!(s.starts_with("  ünïcödé-päck "), "{s}"); // 12 chars, not 12 bytes
@@ -239,19 +428,66 @@ mod tests {
         d.add(1, "act", 100);
         d.add(2, "wait", 200);
         d.finish(0, true);
-        d.set(1, RowState::Active { pct: 50, done: 50, speed: 10, conns: 1, eta: None });
+        d.set(
+            1,
+            RowState::Active {
+                pct: 50,
+                done: 50,
+                speed: 10,
+                conns: 1,
+                eta: None,
+            },
+        );
         let f = d.frame(120, false, 10);
         assert_eq!(f.len(), 4);
         assert!(f[0].contains("act") && f[1].contains("wait") && f[2].contains("done1"));
-        assert!(f[3].contains("37%") && f[3].contains("150B downloaded"), "{}", f[3]); // 150/400
-        assert_eq!(d.frame(120, false, 1).len(), 3, "one row, a 'more' line, the total");
+        assert!(
+            f[3].contains("37%") && f[3].contains("150B downloaded"),
+            "{}",
+            f[3]
+        ); // 150/400
+        assert_eq!(
+            d.frame(120, false, 1).len(),
+            3,
+            "one row, a 'more' line, the total"
+        );
         d.finish(1, false);
         assert!(d.frame(120, false, 10).iter().any(|l| l.contains("FAILED")));
         // Two tasks with the same label stay two rows.
         d.add(3, "same", 1);
         d.add(4, "same", 1);
         assert_eq!(d.frame(120, false, 10).len(), 6);
-        assert!(d.frame(30, false, 10).iter().all(|l| l.trim_start_matches("\x1b[2K").chars().count() <= 29));
+        assert!(d.frame(30, false, 10).iter().all(|l| l
+            .trim_start_matches("\x1b[2K")
+            .chars()
+            .count()
+            <= 29));
+    }
+
+    #[test]
+    fn batched_progress_is_shown_per_package() {
+        let d = Dashboard::new();
+        d.add_task(
+            4,
+            [
+                ("alpha".into(), "alpha.pkg".into(), 100),
+                ("beta".into(), "beta.pkg".into(), 200),
+            ],
+        );
+        let mut p = BatchProgress::new([("alpha.pkg".into(), 100), ("beta.pkg".into(), 200)]);
+        p.feed("[#gid 40B/100B(40%) CN:2 DL:20B ETA:3s]");
+        p.feed("FILE: /cache/alpha.pkg");
+        d.progress_fn()(4, &p);
+        let frame = d.frame(120, false, 10);
+        assert!(
+            frame[0].contains("alpha") && frame[0].contains("40%"),
+            "{frame:?}"
+        );
+        assert!(
+            frame[1].contains("beta") && frame[1].contains("waiting"),
+            "{frame:?}"
+        );
+        assert!(frame[2].contains("Total"));
     }
 
     #[test]
