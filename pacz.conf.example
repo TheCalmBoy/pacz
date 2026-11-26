@@ -1,0 +1,37 @@
+# /etc/pacz.conf: all keys optional; the values shown are the defaults.
+# Unknown keys are an error (so typos are caught).
+
+# Programs
+#pacman = pacman
+#aria2 = aria2-next
+#paru = paru
+
+# Directories
+# cache_dir: default is --cachedir, else pacman.conf's first CacheDir, else /var/cache/pacman/pkg
+#cache_dir = /var/cache/pacman/pkg
+# staging_dir: where aria2 downloads; finished files are moved into the cache.
+# Default: "pacz-staging" next to the cache dir (same filesystem, so the move is a rename).
+#staging_dir = /var/cache/pacman/pacz-staging
+# state_dir: passed to aria2-next as --state-dir; "none" for stock aria2c.
+#state_dir = /var/lib/aria2-next-pacman
+#tmp_dir = /tmp
+
+# Downloads
+#workers = 12
+#mirrors = 5
+#small_size = 8MiB
+#batch_max = 40
+#batch_min = 3
+#check_integrity = true
+# Extra arguments for every aria2 run (whitespace-separated)
+#aria2_args =
+# Packages without a sha256 in the sync DB: let pacman fetch (and verify) them.
+#fallback_to_pacman = true
+
+# AUR step (paru, run as the sudo user) after -Su / -Syu
+#aur = true
+# Forward --noconfirm to paru. That skips PKGBUILD review!
+#aur_noconfirm = true
+
+# Append a line per stage and per package result
+#log_file = /var/log/pacz.log

@@ -1,0 +1,102 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: build, test, clippy (output saved)
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"; O="$RUNNER_TEMP/out"
+          set +e
+          cargo build --all-targets --locked --color never > "$O/build.txt" 2>&1; echo "build=$?" >> "$O/status.txt"
+          cargo test --locked --color never > "$O/test.txt" 2>&1; echo "test=$?" >> "$O/status.txt"
+          cargo clippy --all-targets --locked --color never -- -D warnings > "$O/clippy.txt" 2>&1; echo "clippy=$?" >> "$O/status.txt"
+          rustc -V >> "$O/status.txt"; cargo -V >> "$O/status.txt"
+          echo "commit=$GITHUB_SHA" >> "$O/status.txt"
+          cp Cargo.lock "$O/Cargo.lock"
+          cat "$O/status.txt"
+      - name: publish output to the ci-logs branch
+        if: always()
+        shell: bash
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd "$RUNNER_TEMP/out"
+          git init -q -b ci-logs
+          git add -A
+          git -c user.name=ci -c user.email=ci@localhost commit -qm "ci output for $GITHUB_SHA"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-logs
+      - name: fail if any step failed
+        shell: bash
+        run: "! grep -E '^(build|test|clippy)=[1-9]' \"$RUNNER_TEMP/out/status.txt\""
+
+  # Real pacman --print and stock aria2 output from an Arch container, as test fixtures.
+  fixtures:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: capture
+        shell: bash
+        run: |
+          O=/out; mkdir -p $O; cd /tmp
+          F="%n %v %s %f %r %l %h"
+          set +e
+          { pacman-key --init && pacman-key --populate archlinux; } > $O/keyring.txt 2>&1
+          pacman -Syu --noconfirm > $O/setup.txt 2>&1
+          pacman -S --noconfirm --needed aria2 git >> $O/setup.txt 2>&1
+
+          # pacman --print rows: fresh packages, an upgrade-style query, and a cached package
+          pacman -S --print --print-format "$F" go vim bash > $O/print-s.txt 2> $O/print-s.err; echo "rc=$?" >> $O/print-s.err
+          pacman -Su --print --print-format "$F" > $O/print-su.txt 2> $O/print-su.err; echo "rc=$?" >> $O/print-su.err
+          pacman -Sw --noconfirm vim > /dev/null 2>&1
+          pacman -S --print --print-format "$F" vim > $O/print-cached.txt 2> $O/print-cached.err
+          pacman -S --print --print-format "$F" --needed bash > $O/print-needed.txt 2> $O/print-needed.err; echo "rc=$?" >> $O/print-needed.err
+          pacman -S --print --print-format "$F" no-such-package-xyz > $O/print-missing.txt 2> $O/print-missing.err; echo "rc=$?" >> $O/print-missing.err
+
+          COMMON="--continue --allow-overwrite=true --auto-file-renaming=false --file-allocation=none --summary-interval=1 --console-log-level=notice --enable-color=false"
+          # single big file with splitting
+          awk '$1=="go"{print $6"\n  checksum=sha-256="$7"\n  out="$4}' $O/print-s.txt > single.txt
+          aria2c $COMMON --check-integrity=true --max-concurrent-downloads=1 --split=8 --max-connection-per-server=8 --min-split-size=4M \
+            --input-file single.txt --dir dl-single > $O/aria2-single.txt 2> $O/aria2-single.err; echo "rc=$?" >> $O/aria2-single.err
+          # batch of small files
+          pacman -S --print --print-format "$F" sed grep gzip less which file nano > batch-rows.txt 2>/dev/null
+          awk '{print $6"\n  checksum=sha-256="$7"\n  out="$4}' batch-rows.txt > batch.txt
+          aria2c $COMMON --check-integrity=true --max-concurrent-downloads=8 --split=1 --max-connection-per-server=1 \
+            --input-file batch.txt --dir dl-batch > $O/aria2-batch.txt 2> $O/aria2-batch.err; echo "rc=$?" >> $O/aria2-batch.err
+          # wrong checksum: is the download rejected without / with --check-integrity?
+          BAD=$(printf '0%.0s' $(seq 64))
+          awk -v bad=$BAD 'NR==1{print $6"\n  checksum=sha-256="bad"\n  out="$4}' batch-rows.txt > bad.txt
+          aria2c $COMMON --input-file bad.txt --dir dl-bad1 > $O/aria2-badsha-nocheck.txt 2>&1; echo "rc=$?" >> $O/aria2-badsha-nocheck.txt
+          ls -la dl-bad1 >> $O/aria2-badsha-nocheck.txt 2>&1
+          aria2c $COMMON --check-integrity=true --input-file bad.txt --dir dl-bad2 > $O/aria2-badsha-check.txt 2>&1; echo "rc=$?" >> $O/aria2-badsha-check.txt
+          ls -la dl-bad2 >> $O/aria2-badsha-check.txt 2>&1
+          # interrupted download: what is left behind?
+          timeout -s INT 3 aria2c $COMMON --max-connection-per-server=1 --max-overall-download-limit=200K --input-file single.txt --dir dl-int > $O/aria2-interrupt.txt 2>&1; echo "rc=$?" >> $O/aria2-interrupt.txt
+          ls -la dl-int >> $O/aria2-interrupt.txt 2>&1
+          aria2c --version | head -1 > $O/versions.txt; pacman -V | grep -i pacman >> $O/versions.txt
+          ls -la $O
+      - name: publish fixtures to the ci-fixtures branch
+        if: always()
+        shell: bash
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd /out
+          git init -q -b ci-fixtures
+          git add -A
+          git -c user.name=ci -c user.email=ci@localhost commit -qm "fixtures for $GITHUB_SHA"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-fixtures
