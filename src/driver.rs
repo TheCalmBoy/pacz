@@ -4,7 +4,7 @@
 //! once aria2 reports them complete (and checksum-verified). A half-finished file can
 //! therefore never sit in the cache under its final name, where the next
 //! `pacman --print` would report it as "cached" and pacman would later find it corrupt.
-use crate::aria2::BatchProgress;
+use crate::aria2::{BatchProgress, ResultStatus};
 use crate::conf::Repo;
 use crate::plan::{aria2_input, Task};
 use crate::rows::Pkg;
@@ -98,8 +98,8 @@ impl Aria2Runner {
         }
     }
 
-    /// Start nothing new and terminate running aria2 processes. aria2 writes its control
-    /// files on SIGTERM, so the partial downloads in staging resume on the next run.
+    /// Start nothing new and terminate running aria2 processes. aria2-next stores resume
+    /// data under state-dir; stock aria2 uses sidecars. The staged partials resume next run.
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::SeqCst);
         for &pid in self.children.lock().unwrap_or_else(|e| e.into_inner()).iter() {
@@ -210,13 +210,15 @@ impl Aria2Runner {
         let control = self.staging_dir.join(format!("{}.aria2", p.file));
         // The results table is the most reliable signal; without it, fall back to
         // "whole process succeeded" or "seen completing".
+        let status = prog.result_status(&p.file);
         let reported = prog.result(&p.file).unwrap_or_else(|| exited_ok || prog.is_completed(&p.file));
         if reported && staged.is_file() && !control.exists() {
             return move_into(&staged, &self.cache_dir.join(&p.file)).map_err(|e| format!("cannot move into cache: {e}"));
         }
-        // A full-length file that did not verify is garbage; a shorter one is kept so the
-        // next run resumes it.
-        if fs::metadata(&staged).is_ok_and(|m| p.size > 0 && m.len() >= p.size) {
+        // aria2-next reports INPR for interrupted transfers and can sparse-allocate the
+        // full logical length while keeping resume ranges in state-dir. Keep those files.
+        // Other full-length failures did not verify and are garbage; shorter files resume.
+        if status != Some(ResultStatus::InProgress) && fs::metadata(&staged).is_ok_and(|m| p.size > 0 && m.len() >= p.size) {
             let _ = fs::remove_file(&staged);
             let _ = fs::remove_file(&control);
         }
@@ -347,6 +349,34 @@ exit $rc
         assert!(!root.join("staging/BAD1.pkg.tar.zst").exists(), "full-length bad file removed");
         assert!(!root.join("cache/PART1.pkg.tar.zst").exists() && !root.join("cache/BAD1.pkg.tar.zst").exists());
         assert!(root.join("cache/ok1.pkg.tar.zst").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn state_dir_in_progress_result_keeps_sparse_full_length_partial() {
+        let (mut r, root) = setup("state-inpr");
+        let pkg = Pkg {
+            name: "sample".into(),
+            version: "1-1".into(),
+            size: 134_217_728,
+            file: "sample.pkg.tar.zst".into(),
+            repo: "extra".into(),
+            url: "https://example.invalid/sample.pkg".into(),
+            sha256: Some("a".repeat(64)),
+        };
+        r.state_dir = Some(root.join("state"));
+        fs::create_dir_all(r.state_dir.as_ref().unwrap()).unwrap();
+        let staged = r.staging_dir.join(&pkg.file);
+        fs::File::create(&staged).unwrap().set_len(pkg.size).unwrap();
+        let mut progress = BatchProgress::new([(pkg.file.clone(), pkg.size)]);
+        for line in include_str!("../tests/fixtures/aria2-next-interrupt.txt").lines() {
+            progress.feed(line);
+        }
+
+        assert_eq!(progress.result_status(&pkg.file), Some(ResultStatus::InProgress));
+        assert!(r.settle(&pkg, &progress, false).is_err());
+        assert!(staged.exists(), "aria2-next resume metadata uses state-dir, not a sidecar next to this file");
+        assert!(!r.cache_dir.join(&pkg.file).exists());
         let _ = fs::remove_dir_all(root);
     }
 

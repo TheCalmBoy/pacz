@@ -1,0 +1,44 @@
+
+11/26 09:10:28 [NOTICE] Downloading 7 item(s)
+
+11/26 09:10:28 [NOTICE] Verification finished successfully. file=dl-batch/which-2.25-1-x86_64.pkg.tar.zst
+
+11/26 09:10:28 [NOTICE] Download complete: dl-batch/which-2.25-1-x86_64.pkg.tar.zst
+
+11/26 09:10:28 [NOTICE] Verification finished successfully. file=dl-batch/gzip-1.15-1-x86_64.pkg.tar.zst
+
+11/26 09:10:28 [NOTICE] Download complete: dl-batch/gzip-1.15-1-x86_64.pkg.tar.zst
+
+11/26 09:10:28 [NOTICE] Verification finished successfully. file=dl-batch/grep-3.12-2-x86_64.pkg.tar.zst
+
+11/26 09:10:28 [NOTICE] Download complete: dl-batch/grep-3.12-2-x86_64.pkg.tar.zst
+
+11/26 09:10:28 [NOTICE] Verification finished successfully. file=dl-batch/less-1:710-1-x86_64.pkg.tar.zst
+
+11/26 09:10:28 [NOTICE] Download complete: dl-batch/less-1:710-1-x86_64.pkg.tar.zst
+
+11/26 09:10:28 [NOTICE] Verification finished successfully. file=dl-batch/file-5.48-1-x86_64.pkg.tar.zst
+
+11/26 09:10:28 [NOTICE] Download complete: dl-batch/file-5.48-1-x86_64.pkg.tar.zst
+
+11/26 09:10:28 [NOTICE] Verification finished successfully. file=dl-batch/sed-4.10-2-x86_64.pkg.tar.zst
+
+11/26 09:10:28 [NOTICE] Download complete: dl-batch/sed-4.10-2-x86_64.pkg.tar.zst
+
+11/26 09:10:28 [NOTICE] Verification finished successfully. file=dl-batch/nano-9.3-1-x86_64.pkg.tar.zst
+
+11/26 09:10:28 [NOTICE] Download complete: dl-batch/nano-9.3-1-x86_64.pkg.tar.zst
+
+Download Results:
+gid   |stat|avg speed  |path/URI
+======+====+===========+=======================================================
+25db38|OK  |   4.0MiB/s|dl-batch/which-2.25-1-x86_64.pkg.tar.zst
+c0afd7|OK  |    15MiB/s|dl-batch/gzip-1.15-1-x86_64.pkg.tar.zst
+71b8bb|OK  |    23MiB/s|dl-batch/grep-3.12-2-x86_64.pkg.tar.zst
+822a69|OK  |    18MiB/s|dl-batch/less-1:710-1-x86_64.pkg.tar.zst
+2f0d06|OK  |    40MiB/s|dl-batch/file-5.48-1-x86_64.pkg.tar.zst
+a54286|OK  |    21MiB/s|dl-batch/sed-4.10-2-x86_64.pkg.tar.zst
+d12dbd|OK  |    47MiB/s|dl-batch/nano-9.3-1-x86_64.pkg.tar.zst
+
+Status Legend:
+(OK):download completed.

@@ -169,4 +169,16 @@ mod tests {
         assert!(parse_rows_checked("unexpected pacman output").is_err());
         assert!(parse_rows_checked("error: package conflict").is_err());
     }
+
+    #[test]
+    fn parses_arch_pacman_print_and_cached_fixtures() {
+        let fresh = parse_rows_checked(include_str!("../tests/fixtures/pacman-print-s.txt")).unwrap();
+        assert_eq!(fresh.len(), 5);
+        assert!(fresh.iter().any(|p| p.name == "go" && p.version.starts_with("2:1.27")));
+        assert!(fresh.iter().all(|p| !p.is_cached()));
+
+        let cached = parse_rows_checked(include_str!("../tests/fixtures/pacman-print-cached.txt")).unwrap();
+        assert_eq!(cached.len(), 3);
+        assert!(cached.iter().all(|p| p.is_cached() && p.size == 0));
+    }
 }

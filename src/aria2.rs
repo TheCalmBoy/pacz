@@ -29,9 +29,19 @@ pub enum Event {
     /// `*** Download Progress Summary as of ... ***` starts a new block.
     BlockStart,
     /// A row of the final results table: `gid|OK  |  1.2MiB/s|/path`.
-    Result { ok: bool, path: String },
+    Result { status: ResultStatus, path: String },
     /// `[ERROR] ...` or `errorCode=N ...`
     Error(String),
+}
+
+/// Status from aria2's final results table. `InProgress` can have a sparse file whose
+/// logical length already equals the final package size.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResultStatus {
+    Ok,
+    Error,
+    InProgress,
+    Removed,
 }
 
 fn parse_eta(s: &str) -> Option<u64> {
@@ -84,12 +94,14 @@ fn parse_result_row(line: &str) -> Option<Event> {
     if gid.is_empty() || !gid.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
-    let ok = match f[1].trim() {
-        "OK" => true,
-        "ERR" | "INPR" | "RM" => false,
+    let status = match f[1].trim() {
+        "OK" => ResultStatus::Ok,
+        "ERR" => ResultStatus::Error,
+        "INPR" => ResultStatus::InProgress,
+        "RM" => ResultStatus::Removed,
         _ => return None,
     };
-    Some(Event::Result { ok, path: f[3].trim().to_owned() })
+    Some(Event::Result { status, path: f[3].trim().to_owned() })
 }
 
 pub fn parse_line(raw: &str) -> Option<Event> {
@@ -142,7 +154,7 @@ fn base(path: &str) -> &str {
 pub struct BatchProgress {
     sizes: HashMap<String, u64>,
     completed: HashSet<String>,
-    results: HashMap<String, bool>,
+    results: HashMap<String, ResultStatus>,
     /// Latest progress of each running download.
     live: HashMap<String, Prog>,
     gid_file: HashMap<String, String>,
@@ -209,8 +221,8 @@ impl BatchProgress {
                     }
                 }
             }
-            Some(Event::Result { ok, path }) => {
-                self.results.insert(base(&path).to_owned(), ok);
+            Some(Event::Result { status, path }) => {
+                self.results.insert(base(&path).to_owned(), status);
             }
             Some(Event::Error(msg)) => self.last_error = Some(msg),
             None => {}
@@ -261,6 +273,10 @@ impl BatchProgress {
 
     /// What the final results table said about this file, if it was printed.
     pub fn result(&self, file: &str) -> Option<bool> {
+        self.result_status(file).map(|status| status == ResultStatus::Ok)
+    }
+
+    pub fn result_status(&self, file: &str) -> Option<ResultStatus> {
         self.results.get(file).copied()
     }
 }
@@ -300,8 +316,8 @@ mod tests {
         );
         assert_eq!(parse_line("*** Download Progress Summary as of Wed Nov 25 ***"), Some(Event::BlockStart));
         assert_eq!(parse_line("FILE: /x/a.pkg"), Some(Event::File("/x/a.pkg".into())));
-        assert_eq!(parse_line("2089b0|OK  |   1.2MiB/s|/c/a.pkg"), Some(Event::Result { ok: true, path: "/c/a.pkg".into() }));
-        assert_eq!(parse_line("2089b0|ERR |       0B/s|https://m/b.pkg"), Some(Event::Result { ok: false, path: "https://m/b.pkg".into() }));
+        assert_eq!(parse_line("2089b0|OK  |   1.2MiB/s|/c/a.pkg"), Some(Event::Result { status: ResultStatus::Ok, path: "/c/a.pkg".into() }));
+        assert_eq!(parse_line("2089b0|ERR |       0B/s|https://m/b.pkg"), Some(Event::Result { status: ResultStatus::Error, path: "https://m/b.pkg".into() }));
         assert_eq!(parse_line("gid   |stat|avg speed  |path/URI"), None);
         assert_eq!(
             parse_line("07/22 12:00:00 [ERROR] CUID#7 - Download aborted. URI=https://m/a"),
@@ -314,6 +330,81 @@ mod tests {
         assert_eq!(parse_line("\x1b[1;32m*** Download Progress Summary as of x ***\x1b[0m"), Some(Event::BlockStart));
         assert_eq!(parse_line("======+====+===========+===="), None);
         assert_eq!(parse_line(""), None);
+    }
+
+    #[test]
+    fn parses_arch_aria2c_single_and_batch_fixtures() {
+        let single_file = "go-2:1.27.4-1-x86_64.pkg.tar.zst";
+        let mut single = BatchProgress::new([(single_file.to_string(), 44_400_479)]);
+        for line in include_str!("../tests/fixtures/aria2-single.txt").lines() {
+            single.feed(line);
+        }
+        assert_eq!(single.result(single_file), Some(true));
+        assert!(single.is_completed(single_file));
+        assert_eq!(single.done(), 44_400_479);
+
+        let files = [
+            "which-2.25-1-x86_64.pkg.tar.zst",
+            "gzip-1.15-1-x86_64.pkg.tar.zst",
+            "grep-3.12-2-x86_64.pkg.tar.zst",
+            "less-1:710-1-x86_64.pkg.tar.zst",
+            "file-5.48-1-x86_64.pkg.tar.zst",
+            "sed-4.10-2-x86_64.pkg.tar.zst",
+            "nano-9.3-1-x86_64.pkg.tar.zst",
+        ];
+        let mut batch = BatchProgress::new(files.iter().map(|f| ((*f).to_string(), 1)));
+        for line in include_str!("../tests/fixtures/aria2-batch.txt").lines() {
+            batch.feed(line);
+        }
+        assert_eq!(batch.completed_count(), files.len());
+        assert!(files.iter().all(|f| batch.result(f) == Some(true)));
+    }
+
+    #[test]
+    fn parses_aria2_next_notice_case_and_result_fixture() {
+        let file = "sample.pkg.tar.zst";
+        let mut p = BatchProgress::new([(file.to_string(), 245_760)]);
+        for line in include_str!("../tests/fixtures/aria2-next-single.txt").lines() {
+            p.feed(line);
+        }
+        assert_eq!(p.result(file), Some(true));
+        assert!(p.is_completed(file));
+    }
+
+    #[test]
+    fn parses_aria2_next_interrupted_result_status() {
+        let file = "sample.pkg.tar.zst";
+        let mut p = BatchProgress::new([(file.to_string(), 134_217_728)]);
+        for line in include_str!("../tests/fixtures/aria2-next-interrupt.txt").lines() {
+            p.feed(line);
+        }
+        assert_eq!(p.result_status(file), Some(ResultStatus::InProgress));
+        assert_eq!(p.result(file), Some(false));
+    }
+
+    #[test]
+    fn parses_arch_aria2c_checksum_and_interrupted_result_fixtures() {
+        let file = "sed-4.10-2-x86_64.pkg.tar.zst";
+        for fixture in [
+            include_str!("../tests/fixtures/aria2-badsha-check.txt"),
+            include_str!("../tests/fixtures/aria2-badsha-nocheck.txt"),
+        ] {
+            let mut p = BatchProgress::new([(file.to_string(), 228_000)]);
+            for line in fixture.lines() {
+                p.feed(line);
+            }
+            assert_eq!(p.result(file), Some(false));
+            assert!(p.last_error.as_deref().is_some_and(|e| e.contains("Checksum error")));
+        }
+
+        let go = "go-2:1.27.4-1-x86_64.pkg.tar.zst";
+        let mut interrupted = BatchProgress::new([(go.to_string(), 44_400_479)]);
+        for line in include_str!("../tests/fixtures/aria2-interrupt.txt").lines() {
+            interrupted.feed(line);
+        }
+        assert_eq!(interrupted.result(go), Some(false));
+        assert_eq!(interrupted.result_status(go), Some(ResultStatus::InProgress));
+        assert!(!interrupted.is_completed(go));
     }
 
     #[test]

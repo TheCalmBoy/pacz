@@ -1,0 +1,21 @@
+
+11/26 09:10:27 [NOTICE] Downloading 1 item(s)
+ *** Download Progress Summary as of Thu Nov 26 09:10:28 2026 ***
+===============================================================================
+[#633b67 42MiB/42MiB(100%) CN:0]
+FILE: dl-single/go-2:1.27.4-1-x86_64.pkg.tar.zst
+-------------------------------------------------------------------------------
+
+[#633b67 42MiB/42MiB(100%) CN:0] [Checksum:#633b67 33MiB/42MiB(79%)]
+
+11/26 09:10:28 [NOTICE] Verification finished successfully. file=dl-single/go-2:1.27.4-1-x86_64.pkg.tar.zst
+
+11/26 09:10:28 [NOTICE] Download complete: dl-single/go-2:1.27.4-1-x86_64.pkg.tar.zst
+
+Download Results:
+gid   |stat|avg speed  |path/URI
+======+====+===========+=======================================================
+633b67|OK  |   392MiB/s|dl-single/go-2:1.27.4-1-x86_64.pkg.tar.zst
+
+Status Legend:
+(OK):download completed.

@@ -1,0 +1,10 @@
+[#f5f664 0B/0B CN:0 DL:0B]
+11/26 12:45:35 [notice] Shutting down
+
+Download Results:
+gid   |stat|avg speed  |path/URI
+======+====+===========+=======================================================
+f5f664|INPR|  40.7KiB/s|/tmp/pacz-next-interrupt-2p0eas6u/downloads/sample.pkg.tar.zst
+
+Status Legend:
+(INPR):download in-progress.

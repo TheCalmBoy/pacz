@@ -1,0 +1,11 @@
+[#fd763a 0B/0B CN:0 DL:0B]
+11/26 12:45:12 [notice] Download complete: /tmp/pacz-next-probe-pggie7l9/downloads/sample.pkg.tar.zst
+11/26 12:45:12 [notice] Shutting down
+
+Download Results:
+gid   |stat|avg speed  |path/URI
+======+====+===========+=======================================================
+fd763a|OK  |  26.0MiB/s|/tmp/pacz-next-probe-pggie7l9/downloads/sample.pkg.tar.zst
+
+Status Legend:
+(OK):download completed.
