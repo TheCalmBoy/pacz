@@ -41,5 +41,5 @@ install step.
 
 ## License
 
-No license text was included in the source archive. Choose and add the project's license
-before publishing a release; the PKGBUILD currently marks it as custom.
+No license text was included in the source archive, so the PKGBUILD records the license
+as unknown. Choose and add the project's license before publishing a release.
