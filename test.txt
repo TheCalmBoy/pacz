@@ -1,0 +1,94 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running unittests src/lib.rs (target/debug/build/pacz/ba50da8aece3e627/out/pacz-ba50da8aece3e627)
+
+running 75 tests
+test app::tests::include_globs_are_read_in_order ... ok
+test app::tests::dry_run_only_queries ... ok
+test app::tests::plain_refresh_only_refreshes ... ok
+test app::tests::download_only_falls_back_to_pacman_for_packages_without_sha256 ... ok
+test app::tests::one_failed_download_blocks_the_install ... ok
+test aria2::tests::batch_aggregation_replaces_instead_of_adding ... ok
+test aria2::tests::notice_header_file_results_errors_and_noise ... ok
+test aria2::tests::parses_arch_aria2c_checksum_and_interrupted_result_fixtures ... ok
+test aria2::tests::parses_arch_aria2c_single_and_batch_fixtures ... ok
+test aria2::tests::parses_aria2_next_interrupted_result_status ... ok
+test aria2::tests::parses_aria2_next_notice_case_and_result_fixture ... ok
+test aria2::tests::progress_line ... ok
+test aria2::tests::progress_without_eta_and_compact_readout ... ok
+test aria2::tests::single_download_readouts_do_not_double_count ... ok
+test aur::tests::env_sets_user_vars_and_drops_sudo_ones ... ok
+test aur::tests::parses_updates_skips_ignored_and_noise ... ok
+test aur::tests::sua_arguments ... ok
+test aur::tests::sudo_user_must_be_a_real_user ... ok
+test conf::tests::cachyos_arch_v3_expands ... ok
+test conf::tests::direct_server_lines_and_cap ... ok
+test conf::tests::include_any_spacing_and_expansion ... ok
+test conf::tests::missing_include_or_empty_repo_does_not_panic ... ok
+test conf::tests::options_cache_dir_and_arch ... ok
+test conf::tests::wildcards ... ok
+test conf::tests::xfer_command_is_disabled_and_rest_kept ... ok
+test config::tests::defaults_and_overrides ... ok
+test config::tests::errors_name_the_line ... ok
+test app::tests::download_only_does_not_install ... ok
+test driver::tests::cancelled_runner_starts_nothing ... ok
+test driver::tests::missing_binary_fails_cleanly ... ok
+test driver::tests::partial_download_kept_for_resume_and_bad_full_file_discarded ... ok
+test driver::tests::batch_runs_one_process_and_files_land_in_cache_not_staging ... ok
+test driver::tests::partial_failure_marks_only_the_failed_file_with_aria2_reason ... ok
+test driver::tests::state_dir_in_progress_result_keeps_sparse_full_length_partial ... ok
+test fmt::tests::formats ... ok
+test fmt::tests::parses ... ok
+test fmt::tests::strips_colors ... ok
+test pacman::tests::download_only_args_keeps_operation_flags_before_targets ... ok
+test pacman::tests::flags_reach_both_query_and_install ... ok
+test pacman::tests::hostile_target_stays_one_argv_entry ... ok
+test pacman::tests::operations ... ok
+test pacman::tests::query_forces_no_color_without_duplicates ... ok
+test pacman::tests::raw_keeps_everything_but_dry_run ... ok
+test pacman::tests::refresh_replaces_config_and_counts_y ... ok
+test pacman::tests::value_flags_short_long_and_equals ... ok
+test plan::tests::aria2_input_format_and_sha_enforcement ... ok
+test plan::tests::few_small_packages_stay_single_cached_and_unverified_are_split_off ... ok
+test plan::tests::hundred_fifty_tiny_plus_three_big ... ok
+test plan::tests::zero_batch_max_does_not_panic ... ok
+test render::tests::batched_progress_is_shown_per_package ... ok
+test render::tests::clip_counts_visible_chars_and_keeps_escapes ... ok
+test render::tests::dashboard_totals_ordering_and_same_label_batches ... ok
+test driver::tests::single_uses_split_flags_cached_skipped_and_sha_required ... ok
+test render::tests::eta_and_bar ... ok
+test render::tests::narrow_terminal_drops_sizes_and_truncates_unicode_names ... ok
+test render::tests::progress_fn_updates_dashboard ... ok
+test render::tests::rewind_zero_is_empty ... ok
+test render::tests::row_states_wide ... ok
+test rows::tests::checked_parser_skips_noise_but_rejects_malformed_package_rows ... ok
+test rows::tests::missing_or_bad_sha_is_none_not_a_parse_failure ... ok
+test rows::tests::parses_rows_and_skips_noise ... ok
+test rows::tests::parses_arch_pacman_print_and_cached_fixtures ... ok
+test rows::tests::rejects_path_traversal_and_extra_fields ... ok
+test select::tests::aur_lists_without_sizes_rank_by_name ... ok
+test select::tests::ranks_are_by_size_and_stable_across_sorting_and_search ... ok
+test select::tests::render_shows_marks_and_totals ... ok
+test select::tests::toggles_ranges_and_errors ... ok
+test select_ui::tests::menu_is_bounded_to_terminal_height_and_highlights_search ... ok
+test select_ui::tests::mouse_wheel_reports_are_decoded ... ok
+test urls::tests::cached ... ok
+test urls::tests::own_url_first_and_deduped ... ok
+test urls::tests::unknown_repo_falls_back_to_own_url ... ok
+test app::tests::refresh_uses_a_temporary_conf_and_removes_it ... ok
+test sched::tests::caps_concurrency_isolates_failures_and_keeps_order ... ok
+test app::tests::upgrade_batches_downloads_and_forwards_flags_to_both_calls ... ok
+
+test result: ok. 75 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+
+     Running unittests src/main.rs (target/debug/build/pacz/a9d3a7631743ff13/out/pacz-a9d3a7631743ff13)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests pacz
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

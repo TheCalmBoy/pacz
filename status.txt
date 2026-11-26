@@ -1,0 +1,6 @@
+build=0
+test=0
+clippy=0
+rustc 1.100.0 (0ef1bc386 2026-11-09)
+cargo 1.100.0 (3acc79c0c 2026-11-05)
+commit=bc8834ae13b5072a0f5fec81442e26a35d77aad1
