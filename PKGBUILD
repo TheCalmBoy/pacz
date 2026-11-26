@@ -1,7 +1,7 @@
-# Builds pacz from this local tree: run `makepkg -si` in the project directory.
+# Build this local tree with: BUILDDIR=/tmp/pacz-makepkg makepkg -si
 pkgname=pacz
 pkgver=0.3.0
-pkgrel=1
+pkgrel=2
 pkgdesc='pacman wrapper with batched, mirror-aware parallel downloads via aria2-next'
 arch=('x86_64' 'aarch64')
 url='https://github.com/TheCalmBoy/pacz'
@@ -19,18 +19,18 @@ prepare() {
 
 build() {
   cd "$startdir"
-  export CARGO_TARGET_DIR="$srcdir/target"
+  export CARGO_TARGET_DIR="$startdir/target"
   cargo build --frozen --release
 }
 
 check() {
   cd "$startdir"
-  export CARGO_TARGET_DIR="$srcdir/target"
+  export CARGO_TARGET_DIR="$startdir/target"
   cargo test --frozen
 }
 
 package() {
   cd "$startdir"
-  install -Dm755 "$srcdir/target/release/pacz" "$pkgdir/usr/bin/pacz"
+  install -Dm755 "$startdir/target/release/pacz" "$pkgdir/usr/bin/pacz"
   install -Dm644 pacz.conf.example "$pkgdir/etc/pacz.conf"
 }

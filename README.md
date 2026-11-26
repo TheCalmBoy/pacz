@@ -18,6 +18,22 @@ prints the download plan without refreshing databases, downloading, or installin
 To use stock aria2 instead, configure `aria2 = aria2c` and `state_dir = none` in
 `/etc/pacz.conf`.
 
+## Install or update from a release (x86_64)
+
+Download the latest package and `SHA256SUMS` from the [GitHub Releases page](https://github.com/TheCalmBoy/pacz/releases/latest). Verify the package in the directory where both files were downloaded:
+
+```sh
+sha256sum -c SHA256SUMS
+```
+
+Install the runtime dependency `aria2-next-bin` first if it is not already installed. Then install the downloaded package with pacman. The first release package is named `pacz-0.3.0-2-x86_64.pkg.tar.zst`:
+
+```sh
+sudo pacman -U ./pacz-0.3.0-2-x86_64.pkg.tar.zst
+```
+
+This also updates an older package such as `0.3.0-1`. For later releases, download the new package from the Releases page and run the same `pacman -U` command with its filename.
+
 ## Build and check
 
 ```sh
@@ -26,7 +42,7 @@ cargo test --locked
 cargo clippy --all-targets -- -D warnings
 ```
 
-On Arch, `makepkg -si` builds and installs the package from this directory.
+On Arch, `BUILDDIR=/tmp/pacz-makepkg makepkg -si` builds and installs the package from this directory. The separate build directory keeps makepkg cleanup away from the checked out Rust source tree.
 
 ## Configuration
 

@@ -1,2 +1,4 @@
 /target
 /HANDOFF.md
+/.makepkg
+/*.pkg.tar.zst

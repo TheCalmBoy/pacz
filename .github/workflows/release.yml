@@ -1,0 +1,69 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Arch package (x86_64)
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install build tools
+        shell: bash
+        run: |
+          pacman-key --init
+          pacman-key --populate archlinux
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed base-devel cargo
+
+      - name: Build and test package
+        shell: bash
+        run: |
+          useradd --create-home builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          runuser -u builder -- env HOME=/home/builder CARGO_HOME=/home/builder/.cargo BUILDDIR=/home/builder/.cache/pacz-makepkg \
+            bash -c 'cd "$1" && makepkg --cleanbuild --force --noconfirm' _ "$GITHUB_WORKSPACE"
+
+      - name: Prepare package and checksum
+        shell: bash
+        run: |
+          package=$(find "$GITHUB_WORKSPACE" -maxdepth 1 -type f -name 'pacz-*.pkg.tar.zst' -print -quit)
+          test -n "$package"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp "$package" "$GITHUB_WORKSPACE/dist/"
+          cd "$GITHUB_WORKSPACE/dist"
+          sha256sum pacz-*.pkg.tar.zst > SHA256SUMS
+
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: pacz-arch-x86_64
+          path: ${{ github.workspace }}/dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: pacz-arch-x86_64
+          path: dist
+
+      - name: Create release and attach package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "pacz $GITHUB_REF_NAME" --generate-notes
