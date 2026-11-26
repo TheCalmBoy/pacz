@@ -32,7 +32,7 @@ jobs:
           useradd --create-home builder
           chown -R builder:builder "$GITHUB_WORKSPACE"
           runuser -u builder -- env HOME=/home/builder CARGO_HOME=/home/builder/.cargo BUILDDIR=/home/builder/.cache/pacz-makepkg \
-            bash -c 'cd "$1" && makepkg --cleanbuild --force --noconfirm' _ "$GITHUB_WORKSPACE"
+            bash -c 'cd "$1" && makepkg --cleanbuild --force --nodeps --noconfirm' _ "$GITHUB_WORKSPACE"
 
       - name: Prepare package and checksum
         shell: bash
